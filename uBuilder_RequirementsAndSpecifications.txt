@@ -1,0 +1,34 @@
+Design and code generation of Microcontroller Memory Access Layer (MAL) and Registry Access Layer (RAL)
+=======================================================================================================
+
+1. Create a tool that allows end user to design, generate and execute code for a microcontroller's MAL and RAL:
+- 1a) GUI interface shall be a web page (singol page application) in a web browser.
+
+2. The tool shall generate both code to be loaded on real target (bare metal) microcontroller and the code to emulate microcontroller behavior on PC (simulation mode) based on user request.
+
+3. The tool shall have an hybrid architecture in case of simulation mode:
+- 3a) microcontroller core executing on remote cluster (MAL and RAL available as services)
+- 3b) client on user local machines as GUI: MAL and RAL API stubbed to support remote communication with server.
+
+uBuilder/
+├── gui/                  # Single Page Application (Vanilla HTML/CSS/JS)
+│   ├── index.html
+│   ├── css/
+│   └── js/
+├── server/               # Backend cluster (MAL/RAL as services)
+│   ├── core/             # Microcontroller core emulation
+│   ├── mal/              # MAL service
+│   └── ral/              # RAL service
+├── codegen/              # C code geerator
+│   ├── target/           # bare metal (real target)
+│   └── simulation/       # PC simulation
+├── schemas/              # YAML schemas per MAL/RAL
+├── projects/             # User's projects
+└── README.md
+
+4. The tool shall export MAL and RAL to YAML file and load MAL and RAL from YAML.
+
+5. The tool shall save the design environment (project) and load it based on user request.
+
+6. The client GUI shall run in a browser ("industrial-retro futuristic style") with no external dependencies. UI interface shall be a web page (singol page application) based on Vanilla HTML/CSS/JS.
+
