@@ -1,0 +1,58 @@
+{
+  "name": "untitled",
+  "nodes": [
+    {
+      "id": 1,
+      "layer": "mal",
+      "name": "BOOTA",
+      "type": "segment",
+      "memType": "FLASH",
+      "segAddr": "0x0",
+      "segSize": 65536,
+      "segDefault": "0x00",
+      "desc": "",
+      "x": 960,
+      "y": 1600
+    },
+    {
+      "id": 3,
+      "layer": "mal",
+      "name": "GM_RAM_CLUSTER_0",
+      "type": "segment",
+      "memType": "RAM",
+      "segAddr": "0xFE210000",
+      "segSize": 65536,
+      "segDefault": "0x00",
+      "desc": "",
+      "x": 1184,
+      "y": 1600
+    },
+    {
+      "id": 4,
+      "layer": "mal",
+      "name": "GM_RAM4",
+      "type": "segment",
+      "memType": "RAM",
+      "segAddr": "0xFE410000",
+      "segSize": 4096,
+      "segDefault": "0x00",
+      "desc": "",
+      "x": 1408,
+      "y": 1600
+    },
+    {
+      "id": 2,
+      "layer": "mal",
+      "name": "GTM",
+      "type": "segment",
+      "memType": "PERIPH",
+      "segAddr": "0xFF380000",
+      "segSize": 65536,
+      "segDefault": "0x00",
+      "desc": "",
+      "x": 1632,
+      "y": 1600
+    }
+  ],
+  "nextId": 5
+}

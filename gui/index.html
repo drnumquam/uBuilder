@@ -4,6 +4,103 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>uBuilder — microBuilder</title>
+<script>
+/* ── Minimal ZIP writer (STORE, no compression) ── */
+const fflate = {
+  zip(files, _opts, cb) {
+    try {
+      const enc = new TextEncoder();
+      const entries = Object.entries(files); // [[name, Uint8Array], ...]
+      const localHeaders = [];
+      const centralHeaders = [];
+      let offset = 0;
+
+      for (const [name, data] of entries) {
+        const nameBytes = enc.encode(name);
+        const crc = fflate._crc32(data);
+        const size = data.length;
+
+        // Local file header
+        const lh = new DataView(new ArrayBuffer(30 + nameBytes.length));
+        lh.setUint32(0,  0x04034b50, true); // signature
+        lh.setUint16(4,  20,         true); // version needed
+        lh.setUint16(6,  0,          true); // flags
+        lh.setUint16(8,  0,          true); // compression: STORE
+        lh.setUint16(10, 0,          true); // mod time
+        lh.setUint16(12, 0,          true); // mod date
+        lh.setUint32(14, crc,        true); // crc-32
+        lh.setUint32(18, size,       true); // compressed size
+        lh.setUint32(22, size,       true); // uncompressed size
+        lh.setUint16(26, nameBytes.length, true);
+        lh.setUint16(28, 0,          true); // extra length
+        new Uint8Array(lh.buffer, 30).set(nameBytes);
+        const lhBytes = new Uint8Array(lh.buffer);
+
+        // Central directory header
+        const ch = new DataView(new ArrayBuffer(46 + nameBytes.length));
+        ch.setUint32(0,  0x02014b50, true); // signature
+        ch.setUint16(4,  20,         true); // version made by
+        ch.setUint16(6,  20,         true); // version needed
+        ch.setUint16(8,  0,          true); // flags
+        ch.setUint16(10, 0,          true); // compression: STORE
+        ch.setUint16(12, 0,          true); // mod time
+        ch.setUint16(14, 0,          true); // mod date
+        ch.setUint32(16, crc,        true); // crc-32
+        ch.setUint32(20, size,       true); // compressed size
+        ch.setUint32(24, size,       true); // uncompressed size
+        ch.setUint16(28, nameBytes.length, true);
+        ch.setUint16(30, 0,          true); // extra length
+        ch.setUint16(32, 0,          true); // comment length
+        ch.setUint16(34, 0,          true); // disk start
+        ch.setUint16(36, 0,          true); // internal attr
+        ch.setUint32(38, 0,          true); // external attr
+        ch.setUint32(42, offset,     true); // local header offset
+        new Uint8Array(ch.buffer, 46).set(nameBytes);
+
+        localHeaders.push(lhBytes);
+        centralHeaders.push(new Uint8Array(ch.buffer));
+        offset += lhBytes.length + size;
+      }
+
+      const cdOffset = offset;
+      const cdSize   = centralHeaders.reduce((s, b) => s + b.length, 0);
+
+      // End of central directory
+      const eocd = new DataView(new ArrayBuffer(22));
+      eocd.setUint32(0,  0x06054b50,          true);
+      eocd.setUint16(4,  0,                   true); // disk number
+      eocd.setUint16(6,  0,                   true); // disk with cd
+      eocd.setUint16(8,  entries.length,      true);
+      eocd.setUint16(10, entries.length,      true);
+      eocd.setUint32(12, cdSize,              true);
+      eocd.setUint32(16, cdOffset,            true);
+      eocd.setUint16(20, 0,                   true); // comment length
+
+      // Assemble
+      const parts = [];
+      entries.forEach(([, data], i) => { parts.push(localHeaders[i]); parts.push(data); });
+      centralHeaders.forEach(ch => parts.push(ch));
+      parts.push(new Uint8Array(eocd.buffer));
+
+      const total = parts.reduce((s, p) => s + p.length, 0);
+      const out   = new Uint8Array(total);
+      let pos = 0;
+      for (const p of parts) { out.set(p, pos); pos += p.length; }
+
+      cb(null, out);
+    } catch(e) { cb(e); }
+  },
+
+  _crc32(data) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < data.length; i++) {
+      crc ^= data[i];
+      for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+};
+</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600&display=swap');
 
@@ -37,6 +134,8 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:focus { outline: none; }
+:focus-visible { outline: none; }
 
 body {
   background: var(--bg0);
@@ -62,6 +161,7 @@ body {
   flex-shrink: 0;
   box-shadow: var(--shadow);
   z-index: 10;
+  user-select: none;
 }
 
 .logo {
@@ -88,7 +188,8 @@ body {
   transition: background 0.12s, color 0.12s, border-color 0.12s;
   white-space: nowrap;
 }
-.tb:hover { background: var(--bg3); color: var(--text); border-color: var(--border2); }
+.tb:focus, .tb:focus-visible { outline: none; }
+.vbtn:focus, .vbtn:focus-visible { outline: none; }
 .tb.primary:hover { background: #2a3060; border-color: var(--blue-dim); color: var(--blue); }
 .tb.success { color: var(--green); }
 .tb.success:hover { background: #1e3a20; border-color: var(--green-dim); color: var(--green); }
@@ -103,7 +204,7 @@ body {
 #main { display: flex; flex: 1; overflow: hidden; }
 
 /* LEFT PANEL */
-#left { width: 248px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+#left { width: 248px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; user-select: none; }
 
 .panel-hdr {
   height: 36px; display: flex; align-items: center; padding: 0 12px; gap: 6px;
@@ -130,7 +231,34 @@ body {
 .tree-sec-hdr.ral { color: var(--cyan); }
 .chevron { font-size: 9px; color: var(--text3); transition: transform 0.18s; }
 .tree-sec-hdr.open .chevron { transform: rotate(90deg); }
-.badge { margin-left: auto; background: var(--bg4); border-radius: 10px; font-size: 10px; padding: 1px 6px; color: var(--text3); font-weight: 400; }
+.badge { background: var(--bg4); border-radius: 10px; font-size: 10px; padding: 1px 6px; color: var(--text3); font-weight: 400; }
+.tree-sort-btn {
+  background: transparent; border: none;
+  color: var(--text3); font-size: 11px; cursor: pointer;
+  padding: 1px 3px; border-radius: 3px; line-height: 1;
+  transition: background 0.1s, color 0.1s;
+}
+.tree-sort-btn:hover { background: var(--bg4); color: var(--blue); }
+.tree-sort-btn.sorted { color: var(--blue); }
+.tree-sort-btns { margin-left: auto; display: flex; gap: 1px; }
+/* Memory type group rows in tree */
+.tree-memgrp {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 8px; border-radius: var(--radius);
+  font-size: 10px; font-weight: 600; letter-spacing: 0.4px;
+  text-transform: uppercase; color: var(--text3);
+  cursor: pointer; user-select: none;
+  transition: background 0.1s;
+}
+.tree-memgrp:hover { background: var(--bg3); }
+.tree-memgrp .mg-chevron { font-size: 8px; transition: transform 0.15s; }
+.tree-memgrp.open .mg-chevron { transform: rotate(90deg); }
+.tree-memgrp.mg-RAM   { color: #ffd600; }
+.tree-memgrp.mg-ROM   { color: #ef5350; }
+.tree-memgrp.mg-FLASH { color: #ef5350; }
+.tree-memgrp.mg-PERIPH{ color: #66bb6a; }
+.tree-memgrp-items { display: none; padding-left: 16px; }
+.tree-memgrp-items.open { display: block; }
 
 .tree-items { display: none; padding-left: 8px; }
 .tree-items.open { display: block; }
@@ -145,13 +273,21 @@ body {
 .tree-item.sel { background: #2a3060; color: var(--blue); }
 .ti-icon { font-size: 9px; color: var(--text3); }
 .tree-item.sel .ti-icon { color: var(--blue); }
-.ti-del { margin-left: auto; opacity: 0; color: var(--text3); font-size: 15px; line-height: 1; transition: opacity 0.1s, color 0.1s; padding: 0 2px; }
+.ti-del { margin-left: auto; opacity: 0; color: var(--text3); font-size: 12px; line-height: 1; transition: opacity 0.1s, color 0.1s; padding: 0 2px; cursor: pointer; }
 .tree-item:hover .ti-del { opacity: 1; }
 .ti-del:hover { color: var(--red) !important; }
 
 .tree-add { display: flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: var(--radius); cursor: pointer; font-size: 11px; color: var(--text3); transition: color 0.1s, background 0.1s; }
 .tree-add:hover { color: var(--blue); background: var(--bg3); }
 .tree-add.ral:hover { color: var(--cyan); }
+
+/* RESIZER */
+.resizer {
+  width: 4px; flex-shrink: 0; background: var(--border);
+  cursor: col-resize; transition: background 0.15s;
+  position: relative; z-index: 5;
+}
+.resizer:hover, .resizer.dragging { background: var(--blue); }
 
 /* CANVAS */
 #center { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -175,7 +311,33 @@ body {
   background-size: 32px 32px; opacity: 0.25; pointer-events: none;
 }
 #cscroll { position: absolute; inset: 0; overflow: auto; }
-#cinner { position: relative; min-width: 100%; min-height: 100%; padding: 32px; }
+#cscroll            { cursor: grab; scrollbar-width: none; }
+#cscroll::-webkit-scrollbar { display: none; }
+#cscroll.pan-active { cursor: grabbing; }
+#cscroll.rubber-sel { cursor: crosshair; }
+#czoom { transform-origin: 0 0; display: inline-block; min-width: 100%; min-height: 100%; }
+#cinner { position: relative; width: 2400px; height: 1800px; }
+
+/* Zoom controls */
+.zoom-controls {
+  display: flex; align-items: center; gap: 2px; margin-left: 4px;
+}
+.zoom-btn {
+  width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius); border: 1px solid transparent; background: transparent;
+  color: var(--text3); font-size: 14px; line-height: 1; cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.zoom-btn:focus, .zoom-btn:focus-visible { outline: none; }
+.zoom-btn:hover { background: var(--bg3); color: var(--text); border-color: var(--border2); }
+.zoom-lbl {
+  font-family: var(--font-code); font-size: 10px; color: var(--text3);
+  min-width: 36px; text-align: center; cursor: pointer; padding: 2px 3px;
+  border-radius: var(--radius);
+}
+.zoom-lbl:hover { color: var(--text2); background: var(--bg3); }
+
+/* Minimap removed */
 
 .empty-state {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -188,8 +350,9 @@ body {
 /* CARDS */
 .ub-card {
   position: absolute; background: var(--bg2); border: 1px solid var(--border2);
-  border-radius: 6px; min-width: 200px; box-shadow: var(--shadow);
+  border-radius: 6px; width: 224px; box-shadow: var(--shadow);
   transition: box-shadow 0.15s, border-color 0.15s;
+  user-select: none;
 }
 .ub-card:hover { box-shadow: var(--shadow-lg); border-color: var(--border2); }
 .ub-card.overlap { border-color: var(--red) !important; box-shadow: 0 0 0 2px #ef535040, var(--shadow-lg) !important; }
@@ -202,7 +365,7 @@ body {
 .ub-card.mt-RAM.sel-mal,
 .ub-card.mt-ROM.sel-mal,
 .ub-card.mt-FLASH.sel-mal,
-.ub-card.mt-PERIPH.sel-mal { border-color: #ffffff !important; box-shadow: 0 0 0 2px #ffffff40, var(--shadow-lg) !important; }
+.ub-card.mt-PERIPH.sel-mal { border: 2px solid #ffffff !important; box-shadow: 0 0 0 3px #ffffff50, var(--shadow-lg) !important; }
 /* Card header tint per memory type */
 .ch.mt-RAM   { background: #2a2700; }
 .ch.mt-ROM   { background: #2a1010; }
@@ -214,10 +377,34 @@ body {
 .ch.mt-PERIPH   .ctitle { color: #66bb6a; }
 /* Memory type badge */
 .cbadge { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-family: var(--font-code); font-weight: 500; }
-.ub-card.sel-mal { border-color: var(--blue); box-shadow: 0 0 0 2px #6b8aff25, var(--shadow-lg); }
-.ub-card.sel-ral { border-color: var(--cyan); box-shadow: 0 0 0 2px #4fc3f725, var(--shadow-lg); }
+.ub-card.sel-mal { border: 2px solid #ffffff; box-shadow: 0 0 0 3px #ffffff50, var(--shadow-lg); }
+.ub-card.sel-ral { border: 2px solid #ffffff; box-shadow: 0 0 0 3px #ffffff50, var(--shadow-lg); }
+.ub-card.sel-multi { border: 2px solid var(--cyan) !important; box-shadow: 0 0 0 3px #4fc3f740, var(--shadow-lg) !important; }
 
-.ch { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; cursor: move; user-select: none; }
+/* Rubber-band selection rect */
+#rubber-band {
+  position: absolute; pointer-events: none; z-index: 999;
+  border: 1px solid var(--cyan); background: #4fc3f718;
+  display: none;
+}
+
+.ch { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; cursor: move; user-select: none; }
+.card-edit-btn {
+  margin-left: auto; flex-shrink: 0;
+  background: transparent; border: 1px solid transparent;
+  border-radius: 3px; color: var(--text3); font-size: 12px;
+  cursor: pointer; padding: 2px 5px; line-height: 1;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.card-edit-btn:hover { background: var(--bg4); color: var(--text); border-color: var(--border2); }
+.card-del-btn {
+  flex-shrink: 0;
+  background: transparent; border: 1px solid transparent;
+  border-radius: 3px; color: var(--text3); font-size: 12px;
+  cursor: pointer; padding: 2px 5px; line-height: 1;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.card-del-btn:hover { background: #3a1515; color: var(--red); border-color: #ef535050; }
 .ch.mal { background: #252a45; }
 .ch.ral { background: #1e2d3a; }
 .ctitle { font-size: 12px; font-weight: 600; font-family: var(--font-code); flex: 1; }
@@ -229,7 +416,7 @@ body {
 .cbadge.mt-ROM   { background: #2a1010 !important; color: #ef5350 !important; }
 .cbadge.mt-FLASH { background: #2a1010 !important; color: #ef5350 !important; }
 .cbadge.mt-PERIPH { background: #1a3a1a !important; color: #66bb6a !important; }
-.cbody { padding: 8px 12px; display: flex; flex-direction: column; gap: 3px; }
+.cbody { padding: 8px 12px; display: flex; flex-direction: column; gap: 3px; cursor: move; }
 .crow { display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 1px 0; }
 .ckey { color: var(--text3); font-family: var(--font-code); }
 .cval { color: var(--text2); font-family: var(--font-code); font-size: 11px; }
@@ -285,6 +472,17 @@ body {
 .btn-ghost:hover { border-color: var(--text2); color: var(--text); }
 .btn-blue { background: var(--blue-soft); color: #fff; border-color: var(--blue-soft); }
 .btn-blue:hover { background: var(--blue); border-color: var(--blue); }
+
+/* ── EXPORT MODAL ── */
+.exp-tabs { display:flex; gap:2px; padding:10px 16px 0; background:var(--bg3); border-bottom:1px solid var(--border); }
+.exp-tab { padding:5px 12px; border-radius:var(--radius) var(--radius) 0 0; font-size:11px; font-family:var(--font-code); font-weight:600; cursor:pointer; border:1px solid transparent; border-bottom:none; color:var(--text3); background:transparent; transition:all 0.1s; }
+.exp-tab:hover { color:var(--text2); background:var(--bg4); }
+.exp-tab.active { background:var(--bg2); color:var(--blue); border-color:var(--border2); }
+.exp-pane { display:none; flex-direction:column; gap:8px; padding:12px 16px; }
+.exp-pane.active { display:flex; }
+.exp-code { flex:1; background:var(--bg0); border:1px solid var(--border); border-radius:var(--radius); color:var(--text2); font-family:var(--font-code); font-size:11px; line-height:1.5; padding:10px; resize:none; outline:none; min-height:320px; max-height:420px; overflow-y:auto; white-space:pre; }
+.exp-actions { display:flex; gap:6px; }
+.exp-modal { min-width:640px; max-width:780px; max-height:90vh; display:flex; flex-direction:column; }
 </style>
 </head>
 <body>
@@ -308,8 +506,8 @@ body {
   <div class="h-sep"></div>
   <span class="h-label">Generate</span>
   <div class="h-group">
-    <button class="tb success" onclick="generateCode('target')">▶ Target C</button>
-    <button class="tb warning" onclick="generateCode('simulation')">⟳ Simulation C</button>
+    <button class="tb success" onclick="generateCode('target')">⚙ HW target C</button>
+    <button class="tb warning" onclick="generateCode('simulation')">⦾ Simulation C</button>
   </div>
   <div class="spacer"></div>
   <div class="h-info">
@@ -331,6 +529,12 @@ body {
         <div class="tree-sec-hdr mal open" onclick="toggleSec(this,'mal-items')">
           <span class="chevron">▶</span> MAL
           <span class="badge" id="mal-badge">0</span>
+          <span class="tree-sort-btns">
+            <button class="tree-sort-btn" title="Sort top-to-bottom (vertical stack)"
+              onclick="event.stopPropagation(); sortMal('v', this)">↓</button>
+            <button class="tree-sort-btn" title="Sort left-to-right (horizontal row)"
+              onclick="event.stopPropagation(); sortMal('h', this)">→</button>
+          </span>
         </div>
         <div class="tree-items open" id="mal-items">
           <div class="tree-add" onclick="openAdd('mal')">＋ Add Segment</div>
@@ -348,6 +552,8 @@ body {
     </div>
   </div>
 
+  <div class="resizer" id="resizer-left"></div>
+
   <!-- CENTER -->
   <div id="center">
     <div class="canvas-bar">
@@ -355,22 +561,34 @@ body {
       <button class="vbtn" onclick="setView(this)">MAL</button>
       <button class="vbtn" onclick="setView(this)">RAL</button>
       <div style="width:1px;height:18px;background:var(--border2);margin:0 4px"></div>
-      <button class="vbtn snap-btn" id="snap-btn" onclick="toggleSnap(this)" title="Snap to grid">⊞ Snap</button>
+      <button class="vbtn snap-btn snap-on" id="snap-btn" onclick="toggleSnap(this)" title="Snap to grid">⊞ Snap</button>
+      <div style="width:1px;height:18px;background:var(--border2);margin:0 4px"></div>
+      <div class="zoom-controls">
+        <button class="zoom-btn" onclick="zoomBy(-0.1)" title="Zoom out">−</button>
+        <span class="zoom-lbl" id="zoom-lbl" title="Reset zoom">100%</span>
+        <button class="zoom-btn" onclick="zoomBy(+0.1)" title="Zoom in">+</button>
+      </div>
       <span class="cb-right" id="cinfo">0 nodes</span>
     </div>
     <div id="canvas">
       <div class="cgrid"></div>
       <div id="cscroll">
-        <div id="cinner">
-          <div class="empty-state" id="empty">
-            <div class="eicon">⬡</div>
-            <p>Canvas is empty</p>
-            <p class="esub">Add MAL layers or RAL registers from the panel</p>
+        <div id="rubber-band"></div>
+        <div id="czoom">
+          <div id="cinner">
+            <div class="empty-state" id="empty">
+              <div class="eicon">⬡</div>
+              <p>Canvas is empty</p>
+              <p class="esub">Add MAL layers or RAL registers from the panel</p>
+            </div>
           </div>
         </div>
       </div>
+
     </div>
   </div>
+
+  <div class="resizer" id="resizer-right"></div>
 
   <!-- RIGHT -->
   <div id="right">
@@ -424,7 +642,8 @@ body {
       </div>
       <div class="prop-grp">
         <label class="prop-lbl">Size (bytes, dec or hex)</label>
-        <input class="prop-in" id="mal-size" placeholder="e.g. 256 or 0x100" oninput="clearFieldError('mal-addr-err')" />
+        <input class="prop-in" id="mal-size" placeholder="e.g. 256 or 0x100" oninput="clearFieldError('mal-size-err')" />
+        <span class="field-err" id="mal-size-err"></span>
       </div>
       <div class="prop-grp">
         <label class="prop-lbl">Fill byte (hex)</label>
@@ -471,9 +690,86 @@ body {
   </div>
 </div>
 
+<!-- MODAL: Edit MAL Segment -->
+<div class="overlay" id="modal-edit-mal">
+  <div class="modal">
+    <div class="mhdr">
+      <span>Edit MAL Segment</span>
+      <button class="mx" onclick="closeModal('modal-edit-mal')">×</button>
+    </div>
+    <div class="mbody">
+      <div class="prop-grp">
+        <label class="prop-lbl">Segment ID</label>
+        <input class="prop-in" id="edit-mal-id" placeholder="e.g. SEG_GPIO" oninput="clearFieldError('edit-mal-id-err')" />
+        <span class="field-err" id="edit-mal-id-err"></span>
+      </div>
+      <div class="prop-grp">
+        <label class="prop-lbl">Memory Type</label>
+        <select class="prop-sel" id="edit-mal-memtype">
+          <option value="RAM">RAM</option>
+          <option value="ROM">ROM</option>
+          <option value="FLASH">FLASH</option>
+          <option value="PERIPH">PERIPH</option>
+        </select>
+      </div>
+      <div class="prop-grp">
+        <label class="prop-lbl">Start Address (hex)</label>
+        <input class="prop-in" id="edit-mal-addr" placeholder="e.g. 0x40020000" oninput="clearFieldError('edit-mal-addr-err')" />
+        <span class="field-err" id="edit-mal-addr-err"></span>
+      </div>
+      <div class="prop-grp">
+        <label class="prop-lbl">Size (dec or hex)</label>
+        <input class="prop-in" id="edit-mal-size" placeholder="e.g. 256 or 0x100" oninput="clearFieldError('edit-mal-size-err')" />
+        <span class="field-err" id="edit-mal-size-err"></span>
+      </div>
+      <div class="prop-grp">
+        <label class="prop-lbl">Fill byte (hex)</label>
+        <input class="prop-in" id="edit-mal-default" placeholder="e.g. 0x00" />
+      </div>
+      <div class="prop-grp">
+        <label class="prop-lbl">Description</label>
+        <input class="prop-in" id="edit-mal-desc" placeholder="Brief description..." />
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-mal')">Cancel</button>
+      <button class="btn btn-blue" onclick="confirmEditMal()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Edit RAL Register -->
+<div class="overlay" id="modal-edit-ral">
+  <div class="modal">
+    <div class="mhdr">
+      <span>Edit RAL Register</span>
+      <button class="mx" onclick="closeModal('modal-edit-ral')">×</button>
+    </div>
+    <div class="mbody">
+      <div class="prop-grp">
+        <label class="prop-lbl">Name</label>
+        <input class="prop-in" id="edit-ral-name" placeholder="e.g. CTRL_REG" oninput="clearFieldError('edit-ral-name-err')" />
+        <span class="field-err" id="edit-ral-name-err"></span>
+      </div>
+      <div class="prop-grp">
+        <label class="prop-lbl">Type</label>
+        <select class="prop-sel" id="edit-ral-type"></select>
+      </div>
+      <div class="prop-grp">
+        <label class="prop-lbl">Description</label>
+        <input class="prop-in" id="edit-ral-desc" placeholder="Brief description..." />
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-ral')">Cancel</button>
+      <button class="btn btn-blue" onclick="confirmEditRal()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const GRID = 32;
-const S = { project:'untitled', nodes:[], selected:null, nextId:1, adding:null, drag:null, dragOX:0, dragOY:0, snapEnabled:false };
+const S = { project:'untitled', nodes:[], selected:null, multiSel:new Set(), nextId:1, adding:null, editing:null, drag:null, dragOX:0, dragOY:0, dragOffsets:[], snapEnabled:true, view:'design', rubber:null, zoom:1, pan:null, spaceDown:false };
 const RAL_TYPES = ['register','bitfield','register_group','peripheral_block'];
 
 setInterval(() => { document.getElementById('clock').textContent = new Date().toTimeString().slice(0,8); }, 1000);
@@ -483,6 +779,114 @@ function status(msg, type='') {
   document.getElementById('smsg').textContent = msg;
   sb.className = type;
   if (type) setTimeout(() => { sb.className=''; document.getElementById('smsg').textContent='Ready'; }, 3000);
+}
+
+/* ── Zoom ── */
+const ZOOM_MIN = 0.25, ZOOM_MAX = 2.0, ZOOM_STEP = 0.1;
+
+function applyZoom() {
+  const czoom = document.getElementById('czoom');
+  const lbl   = document.getElementById('zoom-lbl');
+  if (!czoom) return;
+  czoom.style.transform = `scale(${S.zoom})`;
+  czoom.style.width  = (2400 * S.zoom) + 'px';
+  czoom.style.height = (1800 * S.zoom) + 'px';
+  if (lbl) lbl.textContent = Math.round(S.zoom * 100) + '%';
+}
+
+function zoomBy(delta) {
+  const sc   = document.getElementById('cscroll');
+  const cx   = (sc.scrollLeft + sc.clientWidth  / 2) / S.zoom;
+  const cy   = (sc.scrollTop  + sc.clientHeight / 2) / S.zoom;
+  S.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((S.zoom + delta) * 10) / 10));
+  applyZoom();
+  sc.scrollLeft = cx * S.zoom - sc.clientWidth  / 2;
+  sc.scrollTop  = cy * S.zoom - sc.clientHeight / 2;
+}
+
+function zoomReset() {
+  S.zoom = 1;
+  applyZoom();
+  document.getElementById('cscroll').scrollTo(0, 0);
+}
+
+/* ── Minimap ── */
+function updateMinimap() {
+  const mmCanvas = document.getElementById('minimap-canvas');
+  const vp       = document.getElementById('minimap-vp');
+  const sc       = document.getElementById('cscroll');
+  const inner    = document.getElementById('cinner');
+  if (!mmCanvas || !sc || !inner) return;
+
+  const MM_W = mmCanvas.parentElement.clientWidth;
+  const MM_H = mmCanvas.parentElement.clientHeight;
+  mmCanvas.width  = MM_W;
+  mmCanvas.height = MM_H;
+
+  // Compute bounding box of all nodes
+  const nodes = S.nodes;
+  if (!nodes.length) {
+    const ctx = mmCanvas.getContext('2d');
+    ctx.clearRect(0, 0, MM_W, MM_H);
+    vp.style.display = 'none';
+    return;
+  }
+  vp.style.display = 'block';
+
+  let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
+  nodes.forEach(n => {
+    const el = document.querySelector(`[data-id="${n.id}"]`);
+    const w = el ? el.offsetWidth  : 200;
+    const h = el ? el.offsetHeight : 100;
+    minX = Math.min(minX, n.x); minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x + w); maxY = Math.max(maxY, n.y + h);
+  });
+  const PAD = 32;
+  minX = Math.max(0, minX - PAD); minY = Math.max(0, minY - PAD);
+  maxX += PAD; maxY += PAD;
+
+  const worldW = maxX - minX, worldH = maxY - minY;
+  const scaleX = MM_W / worldW, scaleY = MM_H / worldH;
+  const mmScale = Math.min(scaleX, scaleY);
+
+  const offX = (MM_W - worldW * mmScale) / 2;
+  const offY = (MM_H - worldH * mmScale) / 2;
+
+  const ctx = mmCanvas.getContext('2d');
+  ctx.clearRect(0, 0, MM_W, MM_H);
+
+  // Draw nodes
+  nodes.forEach(n => {
+    const el = document.querySelector(`[data-id="${n.id}"]`);
+    const w = el ? el.offsetWidth  : 200;
+    const h = el ? el.offsetHeight : 100;
+    const color = n.layer === 'mal'
+      ? (n.memType === 'RAM'    ? '#ffd600'
+       : n.memType === 'ROM'    ? '#ef5350'
+       : n.memType === 'FLASH'  ? '#ef5350'
+       : '#66bb6a')
+      : '#6b8aff';
+    ctx.fillStyle = (S.selected === n.id || S.multiSel.has(n.id)) ? '#ffffff40' : color + '30';
+    ctx.strokeStyle = (S.selected === n.id || S.multiSel.has(n.id)) ? '#ffffffa0' : color + '90';
+    ctx.lineWidth = 1;
+    const mx = offX + (n.x - minX) * mmScale;
+    const my = offY + (n.y - minY) * mmScale;
+    const mw = Math.max(3, w * mmScale);
+    const mh = Math.max(2, h * mmScale);
+    ctx.beginPath();
+    ctx.roundRect(mx, my, mw, mh, 2);
+    ctx.fill(); ctx.stroke();
+  });
+
+  // Viewport indicator
+  const vpLeft = offX + (sc.scrollLeft / S.zoom - minX) * mmScale;
+  const vpTop  = offY + (sc.scrollTop  / S.zoom - minY) * mmScale;
+  const vpW    = (sc.clientWidth  / S.zoom) * mmScale;
+  const vpH    = (sc.clientHeight / S.zoom) * mmScale;
+  vp.style.left   = Math.max(0, vpLeft) + 'px';
+  vp.style.top    = Math.max(0, vpTop)  + 'px';
+  vp.style.width  = Math.min(MM_W - Math.max(0, vpLeft), vpW) + 'px';
+  vp.style.height = Math.min(MM_H - Math.max(0, vpTop),  vpH) + 'px';
 }
 
 function updateStats() {
@@ -500,16 +904,94 @@ function updateStats() {
 function toggleSec(hdr, id) { hdr.classList.toggle('open'); document.getElementById(id).classList.toggle('open'); }
 
 function renderTree() {
-  const me = document.getElementById('mal-items'), re = document.getElementById('ral-items');
-  me.innerHTML = '<div class="tree-add" onclick="openAdd(\'mal\')">+ Add Segment</div>';
+  const me = document.getElementById('mal-items');
+  const re = document.getElementById('ral-items');
+
+  // ── RAL: flat list ──
   re.innerHTML = '<div class="tree-add ral" onclick="openAdd(\'ral\')">＋ Add register</div>';
-  S.nodes.forEach(n => {
+  S.nodes.filter(n => n.layer === 'ral').forEach(n => {
     const d = document.createElement('div');
-    d.className = 'tree-item' + (S.selected===n.id?' sel':'');
-    d.innerHTML = `<span class="ti-icon">◆</span><span style="flex:1">${n.name}</span><span class="ti-del" onclick="event.stopPropagation();deleteNode(${n.id})">×</span>`;
+    d.className = 'tree-item' + (S.selected === n.id ? ' sel' : '');
+    d.innerHTML = `<span class="ti-icon">◆</span><span style="flex:1">${n.name}</span><span class="ti-del" onclick="event.stopPropagation();askConfirmDelete(${n.id})">🗑</span>`;
     d.onclick = () => select(n.id);
-    (n.layer==='mal'?me:re).insertBefore(d, (n.layer==='mal'?me:re).lastChild);
+    re.insertBefore(d, re.lastChild);
   });
+
+  // ── MAL: grouped by memory type, order follows S.nodes (= address order after sort) ──
+  me.innerHTML = '<div class="tree-add" onclick="openAdd(\'mal\')">+ Add Segment</div>';
+  const malNodes = S.nodes.filter(n => n.layer === 'mal');
+
+  // Groups appear in the order their first member appears in S.nodes
+  const orderedTypes = [];
+  malNodes.forEach(n => {
+    const mt = n.memType || 'RAM';
+    if (!orderedTypes.includes(mt)) orderedTypes.push(mt);
+  });
+
+  orderedTypes.forEach(mt => {
+    const group = malNodes.filter(n => (n.memType || 'RAM') === mt);
+
+    const grpId = 'tree-grp-' + mt;
+    const wasOpen = !document.getElementById(grpId) || document.getElementById(grpId).classList.contains('open');
+
+    const grpHdr = document.createElement('div');
+    grpHdr.className = 'tree-memgrp mg-' + mt + (wasOpen ? ' open' : '');
+    grpHdr.innerHTML = `<span class="mg-chevron">▶</span><span>${mt}</span><span style="margin-left:auto;font-size:10px;opacity:0.6">${group.length}</span>`;
+    grpHdr.onclick = () => {
+      grpHdr.classList.toggle('open');
+      document.getElementById(grpId).classList.toggle('open');
+    };
+
+    const grpItems = document.createElement('div');
+    grpItems.className = 'tree-memgrp-items' + (wasOpen ? ' open' : '');
+    grpItems.id = grpId;
+
+    group.forEach(n => {
+      const d = document.createElement('div');
+      d.className = 'tree-item' + (S.selected === n.id ? ' sel' : '');
+      d.innerHTML = `<span class="ti-icon">◆</span><span style="flex:1">${n.name}</span><span class="ti-del" onclick="event.stopPropagation();askConfirmDelete(${n.id})">🗑</span>`;
+      d.onclick = () => select(n.id);
+      grpItems.appendChild(d);
+    });
+
+    me.insertBefore(grpHdr,   me.lastChild);
+    me.insertBefore(grpItems, me.lastChild);
+  });
+}
+
+function sortMal(dir, btn) {
+  const malNodes = S.nodes.filter(n => n.layer === 'mal');
+  if (malNodes.length < 2) { status('Nothing to sort — add more segments first'); return; }
+
+  // Sort by start address ascending
+  malNodes.sort((a, b) => parseHex(a.segAddr) - parseHex(b.segAddr));
+  const ralNodes = S.nodes.filter(n => n.layer === 'ral');
+  S.nodes = [...malNodes, ...ralNodes];
+
+  const cardDims = malNodes.map(n => {
+    const card = document.querySelector(`[data-id="${n.id}"]`);
+    return { n, w: card ? Math.ceil(card.offsetWidth  / GRID) * GRID : 224,
+                 h: card ? Math.ceil(card.offsetHeight / GRID) * GRID : 96 };
+  });
+
+  // Use the position of the card with the smallest address as the starting anchor
+  const anchor = cardDims[0].n; // already sorted by address ascending
+
+  if (dir === 'v') {
+    const baseX = anchor.x;
+    let curY = anchor.y;
+    cardDims.forEach(({ n, h }) => { n.x = baseX; n.y = curY; curY += h; });
+    status('MAL sorted by address — vertical stack ↕');
+  } else {
+    const baseY = anchor.y;
+    let curX = anchor.x;
+    cardDims.forEach(({ n, w }) => { n.x = curX; n.y = baseY; curX += w; });
+    status('MAL sorted by address — horizontal row ↔');
+  }
+
+  btn.classList.add('sorted');
+  setTimeout(() => btn.classList.remove('sorted'), 800);
+  renderTree(); renderCanvas();
 }
 
 function openAdd(layer) {
@@ -597,34 +1079,49 @@ function confirmAddMal() {
   let valid = true;
   clearFieldError('mal-id-err');
   clearFieldError('mal-addr-err');
+  clearFieldError('mal-size-err');
 
+  // ID — required
   const segId = document.getElementById('mal-id').value.trim();
   if (!segId) {
     setFieldError('mal-id-err', 'Segment ID is required');
     valid = false;
   } else if (isIdDuplicate(segId, null)) {
-    setFieldError('mal-id-err', `ID "${segId}" already exists — choose a different name`);
-    document.getElementById('mal-id').focus();
+    setFieldError('mal-id-err', `ID "${segId}" already exists`);
     valid = false;
   }
 
-  const addrStr = document.getElementById('mal-addr').value.trim() || '0x00000000';
+  // Start Address — required
+  const addrRaw = document.getElementById('mal-addr').value.trim();
+  if (!addrRaw) {
+    setFieldError('mal-addr-err', 'Start Address is required');
+    valid = false;
+  }
+  const addrStr = addrRaw || '0x00000000';
   const addr    = parseHex(addrStr);
-  const size    = parseSize(document.getElementById('mal-size').value);
-
-  if (isNaN(addr)) {
+  if (addrRaw && isNaN(addr)) {
     setFieldError('mal-addr-err', 'Invalid hex address');
     valid = false;
   }
-  if (size <= 0) {
-    setFieldError('mal-addr-err', (document.getElementById('mal-addr-err').textContent || '') + '  Size must be > 0');
+
+  // Size — required (can be 0)
+  const sizeRaw = document.getElementById('mal-size').value.trim();
+  if (sizeRaw === '') {
+    setFieldError('mal-size-err', 'Size is required');
     valid = false;
   }
-  if (!isNaN(addr) && size > 0) {
+  const size = parseSize(sizeRaw);
+  if (sizeRaw !== '' && isNaN(size)) {
+    setFieldError('mal-size-err', 'Invalid size value');
+    valid = false;
+  }
+
+  // Overlap check (only if both addr and size are valid and size > 0)
+  if (valid && !isNaN(addr) && size > 0) {
     const overlap = checkSegmentOverlap(addr, size, null);
     if (overlap) {
       setFieldError('mal-addr-err',
-        `Address range overlaps with segment "${overlap.name}" [${overlap.segAddr}, +${overlap.segSize}B]`);
+        `Overlaps with "${overlap.name}" [${overlap.segAddr}, +${overlap.segSize}B]`);
       valid = false;
     }
   }
@@ -640,6 +1137,115 @@ function confirmAddMal() {
   S.nodes.push(n);
   closeModal('modal-mal'); renderTree(); renderCanvas(); select(n.id); updateStats();
   status(`Segment "${segId}" added to MAL`);
+}
+
+/* ── EDIT functions ── */
+function openEdit(id) {
+  const n = S.nodes.find(n => n.id === id);
+  if (!n) return;
+  S.editing = id;
+
+  if (n.layer === 'mal') {
+    document.getElementById('edit-mal-id').value       = n.name;
+    document.getElementById('edit-mal-memtype').value  = n.memType || 'RAM';
+    document.getElementById('edit-mal-addr').value     = n.segAddr || '';
+    document.getElementById('edit-mal-size').value     = n.segSize || '';
+    document.getElementById('edit-mal-default').value  = n.segDefault || '0x00';
+    document.getElementById('edit-mal-desc').value     = n.desc || '';
+    clearFieldError('edit-mal-id-err');
+    clearFieldError('edit-mal-addr-err');
+    document.getElementById('modal-edit-mal').classList.add('open');
+    setTimeout(() => document.getElementById('edit-mal-id').focus(), 80);
+  } else {
+    document.getElementById('edit-ral-name').value = n.name;
+    document.getElementById('edit-ral-type').innerHTML = RAL_TYPES.map(t =>
+      `<option value="${t}"${t === n.type ? ' selected' : ''}>${t}</option>`).join('');
+    document.getElementById('edit-ral-desc').value = n.desc || '';
+    clearFieldError('edit-ral-name-err');
+    document.getElementById('modal-edit-ral').classList.add('open');
+    setTimeout(() => document.getElementById('edit-ral-name').focus(), 80);
+  }
+}
+
+function confirmEditMal() {
+  const n = S.nodes.find(n => n.id === S.editing);
+  if (!n) return;
+
+  let valid = true;
+  clearFieldError('edit-mal-id-err');
+  clearFieldError('edit-mal-addr-err');
+
+  const segId = document.getElementById('edit-mal-id').value.trim();
+  if (!segId) {
+    setFieldError('edit-mal-id-err', 'Segment ID is required');
+    valid = false;
+  } else if (isIdDuplicate(segId, n.id)) {
+    setFieldError('edit-mal-id-err', `ID "${segId}" already exists — choose a different name`);
+    document.getElementById('edit-mal-id').focus();
+    valid = false;
+  }
+
+  const addrStr = document.getElementById('edit-mal-addr').value.trim() || '0x00000000';
+  const addr    = parseHex(addrStr);
+  const size    = parseSize(document.getElementById('edit-mal-size').value);
+
+  if (isNaN(addr)) {
+    setFieldError('edit-mal-addr-err', 'Invalid hex address');
+    valid = false;
+  }
+  const editSizeRaw = document.getElementById('edit-mal-size').value.trim();
+  if (editSizeRaw === '' || isNaN(size)) {
+    setFieldError('edit-mal-addr-err', 'Size is required (can be 0)');
+    valid = false;
+  }
+  if (!isNaN(addr) && !isNaN(size) && editSizeRaw !== '' && size > 0) {
+    // exclude current node from overlap check
+    const overlap = checkSegmentOverlap(addr, size, n.id);
+    if (overlap) {
+      setFieldError('edit-mal-addr-err',
+        `Overlaps with "${overlap.name}" [${overlap.segAddr}, +${overlap.segSize}B]`);
+      valid = false;
+    }
+  }
+
+  if (!valid) return;
+
+  // Apply changes
+  n.name       = segId;
+  n.memType    = document.getElementById('edit-mal-memtype').value;
+  n.segAddr    = addrStr;
+  n.segSize    = Number(size);
+  n.segDefault = document.getElementById('edit-mal-default').value.trim() || '0x00';
+  n.desc       = document.getElementById('edit-mal-desc').value.trim();
+
+  closeModal('modal-edit-mal');
+  renderTree(); renderCanvas(); renderProps(); updateStats();
+  status(`Segment "${n.name}" updated`);
+}
+
+function confirmEditRal() {
+  const n = S.nodes.find(n => n.id === S.editing);
+  if (!n) return;
+
+  clearFieldError('edit-ral-name-err');
+  const name = document.getElementById('edit-ral-name').value.trim();
+  if (!name) {
+    setFieldError('edit-ral-name-err', 'Name is required');
+    return;
+  }
+  if (isIdDuplicate(name, n.id)) {
+    setFieldError('edit-ral-name-err', `ID "${name}" already exists — choose a different name`);
+    document.getElementById('edit-ral-name').focus();
+    return;
+  }
+
+  n.name = name;
+  n.type = document.getElementById('edit-ral-type').value;
+  n.desc = document.getElementById('edit-ral-desc').value.trim();
+
+  closeModal('modal-edit-ral');
+  renderTree(); renderCanvas(); renderProps(); updateStats();
+  status(`Register "${n.name}" updated`);
 }
 
 function confirmAddRal() {
@@ -682,30 +1288,103 @@ function segSizeStr(n) {
 
 function renderCanvas() {
   const inner = document.getElementById('cinner');
-  document.getElementById('empty').style.display = S.nodes.length===0 ? 'flex' : 'none';
-  inner.querySelectorAll('.ub-card').forEach(c => { if (!S.nodes.find(n=>n.id===+c.dataset.id)) c.remove(); });
-  S.nodes.forEach(n => {
+
+  // Determine visible nodes based on current view
+  const visibleNodes = S.nodes.filter(n => {
+    if (S.view === 'mal') return n.layer === 'mal';
+    if (S.view === 'ral') return n.layer === 'ral';
+    return true; // design: show all
+  });
+
+  document.getElementById('empty').style.display = visibleNodes.length === 0 ? 'flex' : 'none';
+
+  // Remove cards not in current view
+  inner.querySelectorAll('.ub-card').forEach(c => {
+    if (!visibleNodes.find(n => n.id === +c.dataset.id)) c.remove();
+  });
+
+  // Remove old group labels
+  inner.querySelectorAll('.canvas-group-lbl').forEach(l => l.remove());
+
+  visibleNodes.forEach(n => {
     let card = inner.querySelector(`[data-id="${n.id}"]`);
     if (!card) { card = makeCard(n); inner.appendChild(card); }
     card.style.left = n.x+'px'; card.style.top = n.y+'px';
+    // Snap height to grid multiple after layout
+    card.style.height = '';
+    requestAnimationFrame(() => {
+      const h = card.offsetHeight;
+      const snapped = Math.ceil(h / GRID) * GRID;
+      if (card.offsetHeight !== snapped) card.style.minHeight = snapped + 'px';
+    });
     const isMal = n.layer==='mal';
     const mtClass = (isMal && n.memType) ? ' mt-' + n.memType : '';
-    card.className = 'ub-card' + mtClass + (S.selected===n.id ? (isMal?' sel-mal':' sel-ral') : '');
+    card.className = 'ub-card' + mtClass + (S.selected===n.id ? (isMal?' sel-mal':' sel-ral') : '') + (S.multiSel.has(n.id) ? ' sel-multi' : '');
     card.querySelector('.ctitle').textContent = n.name;
     const badge = card.querySelector('.cbadge');
     badge.textContent = isMal ? (n.memType || 'segment') : n.type;
     badge.className = 'cbadge' + (isMal && n.memType ? ' mt-' + n.memType : '');
-    card.querySelector('.cbody').innerHTML = n.layer==='mal' ? `
-      <div class="crow"><span class="ckey">start</span><span class="cval">${n.segAddr||'—'}</span></div>
-      <div class="crow"><span class="ckey">end</span><span class="cval">${segEndAddr(n)}</span></div>
-      <div class="crow"><span class="ckey">size</span><span class="cval">${segSizeStr(n)}</span></div>
-      <div class="crow"><span class="ckey">fill</span><span class="cval">${n.segDefault||'0x00'}</span></div>
-      ${n.desc?`<div class="crow"><span class="ckey">desc</span><span class="cval" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.desc}</span></div>`:''}
-    ` : `
-      <div class="crow"><span class="ckey">type</span><span class="cval">${n.type}</span></div>
-      ${n.desc?`<div class="crow"><span class="ckey">desc</span><span class="cval" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.desc}</span></div>`:''}
-    `;
+    // Build card body safely — use setAttribute for desc to avoid HTML injection
+    (function buildBody(cbody) {
+      cbody.innerHTML = '';
+      function row(key, val) {
+        const d = document.createElement('div'); d.className = 'crow';
+        d.innerHTML = `<span class="ckey">${key}</span><span class="cval">${val}</span>`;
+        cbody.appendChild(d);
+      }
+      function descRow(desc) {
+        const d = document.createElement('div');
+        d.className = 'crow';
+        if (desc) {
+          d.innerHTML = '<span class="ckey">desc</span><span class="cval" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>';
+          d.querySelector('.cval').textContent = desc;
+        } else {
+          d.innerHTML = '<span class="ckey">desc</span><span class="cval" style="opacity:0.3">—</span>';
+        }
+        cbody.appendChild(d);
+      }
+      if (n.layer === 'mal') {
+        row('start', n.segAddr||'—');
+        row('end',   segEndAddr(n));
+        row('size',  segSizeStr(n));
+        row('fill',  n.segDefault||'0x00');
+        descRow(n.desc);
+      } else {
+        row('type', n.type);
+        descRow(n.desc);
+      }
+    })(card.querySelector('.cbody'));
   });
+
+  // In MAL view: draw memory-type group labels as background banners
+  if (S.view === 'mal') {
+    const MEM_TYPES = ['RAM','ROM','FLASH','PERIPH'];
+    const MT_COLORS = { RAM:'#ffd600', ROM:'#ef5350', FLASH:'#ef5350', PERIPH:'#66bb6a' };
+    MEM_TYPES.forEach(mt => {
+      const group = visibleNodes.filter(n => (n.memType||'RAM') === mt);
+      if (group.length === 0) return;
+      // Compute bounding box of the group
+      const xs = group.map(n => n.x);
+      const ys = group.map(n => n.y);
+      const getH = n => { const c = inner.querySelector(`[data-id="${n.id}"]`); return c ? Math.ceil(c.offsetHeight/GRID)*GRID : 96; };
+      const getW = n => { const c = inner.querySelector(`[data-id="${n.id}"]`); return c ? Math.ceil(c.offsetWidth/GRID)*GRID : 224; };
+      const x1 = Math.min(...xs) - 8;
+      const y1 = Math.min(...ys) - 20;
+      const x2 = Math.max(...group.map(n => n.x + getW(n))) + 8;
+      const y2 = Math.max(...group.map(n => n.y + getH(n))) + 8;
+
+      const lbl = document.createElement('div');
+      lbl.className = 'canvas-group-lbl';
+      lbl.style.cssText = `position:absolute;left:${x1}px;top:${y1}px;width:${x2-x1}px;height:${y2-y1}px;
+        border:1px dashed ${MT_COLORS[mt]}40;border-radius:8px;pointer-events:none;`;
+      const tag = document.createElement('span');
+      tag.style.cssText = `position:absolute;top:3px;left:8px;font-family:var(--font-code);
+        font-size:9px;font-weight:700;letter-spacing:1px;color:${MT_COLORS[mt]};opacity:0.7;`;
+      tag.textContent = mt;
+      lbl.appendChild(tag);
+      inner.insertBefore(lbl, inner.firstChild);
+    });
+  }
 }
 
 function makeCard(n) {
@@ -714,39 +1393,77 @@ function makeCard(n) {
   const isMal = n.layer==='mal';
   const hdr = document.createElement('div');
   hdr.className = `ch ${n.layer}${n.memType ? ' mt-' + n.memType : ''}`;
-  hdr.innerHTML = `<span class="ctitle"></span><span class="cbadge"></span>`;
+  hdr.innerHTML = `<span class="ctitle"></span><span class="cbadge"></span><button class="card-del-btn" title="Delete">🗑</button>`;
+
+  // Delete button — stop propagation so it doesn't trigger drag/select
+  const delBtn = hdr.querySelector('.card-del-btn');
+  delBtn.addEventListener('mousedown', e => e.stopPropagation());
+  delBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (S.multiSel.has(n.id) && S.multiSel.size > 1) askConfirmDeleteMulti([...S.multiSel]);
+    else askConfirmDelete(n.id);
+  });
+
   card.appendChild(hdr);
   const body = document.createElement('div');
   body.className = 'cbody';
   card.appendChild(body);
-  hdr.addEventListener('mousedown', e => {
-    if (e.button!==0) return;
-    select(n.id); S.drag=n;
-    const r = card.getBoundingClientRect();
-    S.dragOX = e.clientX-r.left; S.dragOY = e.clientY-r.top;
+
+  // Single unified listener — handles clicks anywhere on the card
+  card.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
     e.preventDefault();
+
+    if (e.ctrlKey || e.metaKey) {
+      select(n.id, true);
+      return;
+    }
+
+    // Ensure node is selected
+    if (S.selected !== n.id && !S.multiSel.has(n.id)) select(n.id);
+
+    // Start drag
+    const r = card.getBoundingClientRect();
+    S.drag   = n;
+    S.dragOX = (e.clientX - r.left) / S.zoom;
+    S.dragOY = (e.clientY - r.top)  / S.zoom;
+
+    if (S.multiSel.has(n.id)) {
+      S.dragOffsets = [];
+      S.multiSel.forEach(id => {
+        const other = S.nodes.find(x => x.id === id);
+        if (other) S.dragOffsets.push({ node: other, dx: other.x - n.x, dy: other.y - n.y });
+      });
+    } else {
+      S.dragOffsets = [];
+    }
   });
-  card.addEventListener('mousedown', e => { if (e.button===0) select(n.id); });
+
   return card;
 }
 
 function getCardRect(n) {
   const card = document.querySelector(`[data-id="${n.id}"]`);
   if (!card) return null;
-  return { x: n.x, y: n.y, w: card.offsetWidth, h: card.offsetHeight };
+  return {
+    x: n.x, y: n.y,
+    w: Math.ceil(card.offsetWidth  / GRID) * GRID,
+    h: Math.ceil(card.offsetHeight / GRID) * GRID
+  };
 }
 
 function rectsOverlap(a, b) {
-  const PAD = 4; // 4px gap minimum
-  return a.x < b.x + b.w + PAD && a.x + a.w + PAD > b.x &&
-         a.y < b.y + b.h + PAD && a.y + a.h + PAD > b.y;
+  // strict overlap only — blocks can be adjacent (touching) but not overlapping
+  return a.x < b.x + b.w && a.x + a.w > b.x &&
+         a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
 function resolveOverlap(dragNode, nx, ny) {
   // Try the requested position; if it overlaps push away
   const others = S.nodes.filter(n => n.id !== dragNode.id);
-  const dW = (document.querySelector(`[data-id="${dragNode.id}"]`) || {offsetWidth:200}).offsetWidth;
-  const dH = (document.querySelector(`[data-id="${dragNode.id}"]`) || {offsetHeight:80}).offsetHeight;
+  const dEl = document.querySelector(`[data-id="${dragNode.id}"]`);
+  const dW = dEl ? Math.ceil(dEl.offsetWidth  / GRID) * GRID : 224;
+  const dH = dEl ? Math.ceil(dEl.offsetHeight / GRID) * GRID : 96;
   const dr = { x: nx, y: ny, w: dW, h: dH };
 
   for (const o of others) {
@@ -754,16 +1471,16 @@ function resolveOverlap(dragNode, nx, ny) {
     if (!or) continue;
     if (rectsOverlap(dr, or)) {
       // Push horizontally or vertically — choose shortest escape
-      const pushRight = or.x + or.w + 8 - nx;
-      const pushLeft  = nx + dW + 8 - or.x;
-      const pushDown  = or.y + or.h + 8 - ny;
-      const pushUp    = ny + dH + 8 - or.y;
+      const pushRight = or.x + or.w - nx;
+      const pushLeft  = nx + dW - or.x;
+      const pushDown  = or.y + or.h - ny;
+      const pushUp    = ny + dH - or.y;
       const minH = Math.min(pushRight, pushLeft);
       const minV = Math.min(pushDown, pushUp);
       if (minH <= minV) {
-        nx = pushRight < pushLeft ? or.x + or.w + 8 : or.x - dW - 8;
+        nx = pushRight < pushLeft ? or.x + or.w : or.x - dW;
       } else {
-        ny = pushDown < pushUp ? or.y + or.h + 8 : or.y - dH - 8;
+        ny = pushDown < pushUp ? or.y + or.h : or.y - dH;
       }
       dr.x = nx; dr.y = ny;
     }
@@ -772,81 +1489,272 @@ function resolveOverlap(dragNode, nx, ny) {
 }
 
 document.addEventListener('mousemove', e => {
-  if (!S.drag) return;
   const sc = document.getElementById('cscroll'), r = sc.getBoundingClientRect();
-  let nx = Math.max(0, e.clientX - r.left - S.dragOX + sc.scrollLeft);
-  let ny = Math.max(0, e.clientY - r.top  - S.dragOY + sc.scrollTop);
 
-  // snap to grid
-  nx = snapVal(nx); ny = snapVal(ny);
+  // ── Pan ──
+  if (S.pan) {
+    sc.scrollLeft = S.pan.scrollX + (S.pan.startX - e.clientX);
+    sc.scrollTop  = S.pan.scrollY + (S.pan.startY - e.clientY);
+    return;
+  }
 
-  // resolve overlap
-  const resolved = resolveOverlap(S.drag, nx, ny);
-  S.drag.x = resolved.x;
-  S.drag.y = resolved.y;
-  renderCanvas();
+  // ── Multi/single drag ──
+  if (S.drag) {
+    let nx = Math.max(0, (e.clientX - r.left + sc.scrollLeft) / S.zoom - S.dragOX);
+    let ny = Math.max(0, (e.clientY - r.top  + sc.scrollTop)  / S.zoom - S.dragOY);
+    nx = snapVal(nx); ny = snapVal(ny);
+
+    if (S.dragOffsets.length > 0) {
+      S.drag.x = Math.max(0, nx);
+      S.drag.y = Math.max(0, ny);
+      S.dragOffsets.forEach(({ node, dx, dy }) => {
+        node.x = Math.max(0, nx + dx);
+        node.y = Math.max(0, ny + dy);
+      });
+    } else {
+      const resolved = resolveOverlap(S.drag, nx, ny);
+      S.drag.x = resolved.x;
+      S.drag.y = resolved.y;
+    }
+    renderCanvas();
+    return;
+  }
+
+  // ── Rubber-band ──
+  if (S.rubber) {
+    sc.classList.add('rubber-sel');
+    const x1 = S.rubber.x0, y1 = S.rubber.y0;
+    const x2 = (e.clientX - r.left + sc.scrollLeft) / S.zoom;
+    const y2 = (e.clientY - r.top  + sc.scrollTop)  / S.zoom;
+    const rx = Math.min(x1,x2), ry = Math.min(y1,y2);
+    const rw = Math.abs(x2-x1), rh = Math.abs(y2-y1);
+    const rb = document.getElementById('rubber-band');
+    rb.style.display = 'block';
+    // rubber-band div lives in cscroll (unscaled), so scale back up for display
+    rb.style.left   = (rx * S.zoom) + 'px'; rb.style.top    = (ry * S.zoom) + 'px';
+    rb.style.width  = (rw * S.zoom) + 'px'; rb.style.height = (rh * S.zoom) + 'px';
+
+    S.multiSel.clear();
+    S.nodes.forEach(n => {
+      const el = document.querySelector(`[data-id="${n.id}"]`);
+      if (!el) return;
+      const ex = n.x, ey = n.y, ew = el.offsetWidth, eh = el.offsetHeight;
+      if (ex < rx+rw && ex+ew > rx && ey < ry+rh && ey+eh > ry) S.multiSel.add(n.id);
+    });
+    S.selected = null;
+    renderCanvas();
+  }
 });
-document.addEventListener('mouseup', ()=>{ S.drag=null; });
 
-function select(id) { S.selected=id; renderTree(); renderCanvas(); renderProps(); }
+document.addEventListener('mouseup', e => {
+  const sc = document.getElementById('cscroll');
+  // ── End pan ──
+  if (S.pan) {
+    S.pan = null;
+    sc.classList.remove('pan-active');
+    if (S.spaceDown) sc.classList.add('pan-ready');
+    return;
+  }
+  S.drag = null; S.dragOffsets = [];
+  sc.classList.remove('rubber-sel');
+  if (S.rubber) {
+    S.rubber = null;
+    document.getElementById('rubber-band').style.display = 'none';
+    // If only one node selected via rubber-band, promote to single select
+    if (S.multiSel.size === 1) {
+      S.selected = [...S.multiSel][0];
+      S.multiSel.clear();
+    }
+    renderTree(); renderCanvas(); renderProps();
+    return;
+  }
+  // Click on empty canvas (not on a card) = deselect all
+  if (e.button === 0 && !e.target.closest('.ub-card') && e.target.closest('#cscroll')) {
+    if (S.selected !== null || S.multiSel.size > 0) {
+      S.selected = null; S.multiSel.clear();
+      document.activeElement?.blur();
+      renderTree(); renderCanvas(); renderProps();
+    }
+  }
+});
+
+// ── Tooltip for desc fields ──
+let _confirmDeleteId  = null;
+let _confirmDeleteIds = null; // multi-delete
+
+function askConfirmDelete(nodeId) {
+  const node = S.nodes.find(n => n.id === nodeId);
+  if (!node) return;
+  _confirmDeleteId  = nodeId;
+  _confirmDeleteIds = null;
+  document.getElementById('confirm-msg').textContent =
+    `Are you sure you want to delete "${node.name}"? This action cannot be undone.`;
+  document.getElementById('modal-confirm').classList.add('open');
+}
+
+function askConfirmDeleteMulti(ids) {
+  if (!ids || ids.length === 0) return;
+  if (ids.length === 1) { askConfirmDelete(ids[0]); return; }
+  _confirmDeleteId  = null;
+  _confirmDeleteIds = ids;
+  document.getElementById('confirm-msg').textContent =
+    `Are you sure you want to delete ${ids.length} selected nodes? This action cannot be undone.`;
+  document.getElementById('modal-confirm').classList.add('open');
+}
+
+function confirmDeleteOk() {
+  closeModal('modal-confirm');
+  if (_confirmDeleteIds !== null) {
+    const ids = _confirmDeleteIds; _confirmDeleteIds = null;
+    S.multiSel.clear();
+    ids.forEach(id => deleteNode(id));
+  } else if (_confirmDeleteId !== null) {
+    deleteNode(_confirmDeleteId); _confirmDeleteId = null;
+  }
+}
+
+
+
+function select(id, addToMulti) {
+  if (addToMulti) {
+    if (S.multiSel.has(id)) { S.multiSel.delete(id); }
+    else { S.multiSel.add(id); }
+    S.selected = null;
+  } else {
+    S.multiSel.clear();
+    S.selected = id;
+  }
+  // Update card selection classes in-place to avoid DOM destruction during mousedown/drag
+  document.querySelectorAll('.ub-card').forEach(el => {
+    const nid = Number(el.dataset.id);
+    el.classList.remove('sel-mal','sel-ral','sel-multi');
+    if (S.multiSel.has(nid)) {
+      el.classList.add('sel-multi');
+    } else if (S.selected === nid) {
+      const node = S.nodes.find(n => n.id === nid);
+      el.classList.add(node && node.layer === 'ral' ? 'sel-ral' : 'sel-mal');
+    }
+  });
+  renderTree(); renderProps();
+  // Defer full canvas re-render to avoid interrupting the current mousedown event chain
+  requestAnimationFrame(() => renderCanvas());
+}
 
 function renderProps() {
   const body = document.getElementById('prop-body');
   const n = S.nodes.find(n=>n.id===S.selected);
   if (!n) { body.innerHTML=`<div class="prop-empty"><div class="peicon">◫</div><p>Select a node<br>to edit its properties</p></div>`; return; }
   const malProps = n.layer==='mal' ? `
-    <div class="prop-grp"><label class="prop-lbl">Segment ID</label><input class="prop-in" value="${n.name}" oninput="setProp('name',this.value)"/></div>
+    <div class="prop-grp"><label class="prop-lbl">Segment ID <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-name" value="${n.name}" onblur="setProp('name',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-name-err')"/><span class="field-err" id="pp-name-err"></span></div>
     <div class="prop-grp"><label class="prop-lbl">Memory Type</label><select class="prop-sel" onchange="setProp('memType',this.value)">${['RAM','ROM','FLASH','PERIPH'].map(t=>`<option value="${t}"${t===n.memType?' selected':''}>${t}</option>`).join('')}</select></div>
-    <div class="prop-grp"><label class="prop-lbl">Start Address (hex)</label><input class="prop-in" value="${n.segAddr||''}" oninput="setProp('segAddr',this.value)" placeholder="0x40020000"/></div>
-    <div class="prop-grp"><label class="prop-lbl">End Address</label><input class="prop-in" value="${segEndAddr(n)}" disabled style="opacity:0.6"/></div>
-    <div class="prop-grp"><label class="prop-lbl">Size (dec or hex)</label><input class="prop-in" value="${n.segSize||''}" oninput="setProp('segSize',this.value)" placeholder="256 or 0x100"/></div>
+    <div class="prop-grp"><label class="prop-lbl">Start Address (hex) <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-addr" value="${n.segAddr||''}" placeholder="0x40020000" onblur="setProp('segAddr',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-addr-err')"/><span class="field-err" id="pp-addr-err"></span></div>
+    <div class="prop-grp"><label class="prop-lbl">End Address</label><input class="prop-in" id="pp-end" value="${segEndAddr(n)}" disabled style="opacity:0.6"/></div>
+    <div class="prop-grp"><label class="prop-lbl">Size (dec or hex) <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-size" value="${n.segSize!==undefined&&n.segSize!==''?n.segSize:''}" placeholder="256 or 0x100" onblur="setProp('segSize',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-size-err')"/><span class="field-err" id="pp-size-err"></span></div>
     <div class="prop-grp"><label class="prop-lbl">Size (hex)</label><input class="prop-in" value="${segSizeStr(n)}" disabled style="opacity:0.6"/></div>
     <div class="prop-grp"><label class="prop-lbl">Fill byte (hex)</label><input class="prop-in" value="${n.segDefault||'0x00'}" oninput="setProp('segDefault',this.value)" placeholder="0x00"/></div>
     <div class="prop-grp"><label class="prop-lbl">Description</label><input class="prop-in" value="${n.desc}" oninput="setProp('desc',this.value)" placeholder="Description..."/></div>
   ` : `
-    <div class="prop-grp"><label class="prop-lbl">Name</label><input class="prop-in" value="${n.name}" oninput="setProp('name',this.value)"/></div>
+    <div class="prop-grp"><label class="prop-lbl">Name <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-name" value="${n.name}" onblur="setProp('name',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-name-err')"/><span class="field-err" id="pp-name-err"></span></div>
     <div class="prop-grp"><label class="prop-lbl">Type</label><select class="prop-sel" onchange="setProp('type',this.value)">${RAL_TYPES.map(t=>`<option value="${t}"${t===n.type?' selected':''}>${t}</option>`).join('')}</select></div>
     <div class="prop-grp"><label class="prop-lbl">Description</label><input class="prop-in" value="${n.desc}" oninput="setProp('desc',this.value)" placeholder="Description..."/></div>
   `;
   body.innerHTML = malProps + `
-    <div class="prop-grp"><label class="prop-lbl">Layer</label><input class="prop-in" value="${n.layer.toUpperCase()}" disabled/></div>
-    <div class="prop-grp" style="margin-top:auto;padding-top:8px;border-top:1px solid var(--border)">
-      <button class="del-btn" onclick="deleteNode(${n.id})">Delete node</button>
-    </div>`;
+    <div class="prop-grp"><label class="prop-lbl">Layer</label><input class="prop-in" value="${n.layer.toUpperCase()}" disabled/></div>`;
 }
+
+function ppSetErr(id, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  const inp = document.getElementById(id.replace('-err', ''));
+  if (inp) inp.classList.toggle('err', !!msg);
+}
+function ppClearErr(id) { ppSetErr(id, ''); }
 
 function setProp(k, v) {
   const n = S.nodes.find(n => n.id === S.selected);
   if (!n) return;
 
-  // ID uniqueness check
-  if (k === 'name' && v.trim()) {
-    if (isIdDuplicate(v.trim(), n.id)) {
-      status(`ID "${v.trim()}" already exists — choose a different name`, 'err');
-      return;
+  // ── NAME / ID ──
+  if (k === 'name') {
+    ppClearErr('pp-name-err');
+    if (!v.trim()) {
+      ppSetErr('pp-name-err', 'ID is required');
+      document.getElementById('pp-name').value = n.name; return;
     }
+    if (isIdDuplicate(v.trim(), n.id)) {
+      ppSetErr('pp-name-err', `"${v.trim()}" already exists`);
+      document.getElementById('pp-name').value = n.name; return;
+    }
+    n.name = v.trim();
+    renderTree(); renderCanvas(); updateStats(); return;
   }
 
-  // Segment overlap check when editing address or size
-  if (n.layer === 'mal' && (k === 'segAddr' || k === 'segSize')) {
-    const addr = parseHex(k === 'segAddr' ? v : n.segAddr);
-    const size = k === 'segSize' ? parseInt(v) : n.segSize;
-    if (!isNaN(addr) && size > 0) {
-      const overlap = checkSegmentOverlap(addr, size, n.id);
-      if (overlap) {
-        status(`Address range overlaps with segment "${overlap.name}" [${overlap.segAddr}, +${overlap.segSize}B]`, 'err');
-        return;
+  // ── START ADDRESS ──
+  if (n.layer === 'mal' && k === 'segAddr') {
+    ppClearErr('pp-addr-err');
+    if (!v.trim()) {
+      ppSetErr('pp-addr-err', 'Start Address is required');
+      document.getElementById('pp-addr').value = n.segAddr || ''; return;
+    }
+    if (isNaN(parseHex(v.trim()))) {
+      ppSetErr('pp-addr-err', 'Invalid hex address');
+      document.getElementById('pp-addr').value = n.segAddr || ''; return;
+    }
+    const addr = parseHex(v.trim()), size = Number(n.segSize);
+    if (size > 0) {
+      const ov = checkSegmentOverlap(addr, size, n.id);
+      if (ov) {
+        ppSetErr('pp-addr-err', `Overlaps with "${ov.name}" [${ov.segAddr}, +${ov.segSize}B]`);
+        document.getElementById('pp-addr').value = n.segAddr || ''; return;
       }
     }
+    n.segAddr = v.trim();
+    const endEl = document.getElementById('pp-end');
+    if (endEl) endEl.value = segEndAddr(n);
+    renderCanvas(); updateStats(); return;
   }
 
-  n[k] = (k === 'segSize') ? Number(parseSize(v)) : v;
+  // ── SIZE ──
+  if (n.layer === 'mal' && k === 'segSize') {
+    ppClearErr('pp-size-err');
+    const sv = String(v).trim();
+    if (sv === '') {
+      ppSetErr('pp-size-err', 'Size is required');
+      document.getElementById('pp-size').value = n.segSize ?? ''; return;
+    }
+    const parsed = parseSize(sv);
+    if (isNaN(parsed) || parsed < 0) {
+      ppSetErr('pp-size-err', 'Invalid size value');
+      document.getElementById('pp-size').value = n.segSize ?? ''; return;
+    }
+    const addr = parseHex(n.segAddr);
+    if (!isNaN(addr) && parsed > 0) {
+      const ov = checkSegmentOverlap(addr, parsed, n.id);
+      if (ov) {
+        ppSetErr('pp-size-err', `Overlaps with "${ov.name}" [${ov.segAddr}, +${ov.segSize}B]`);
+        document.getElementById('pp-size').value = n.segSize ?? ''; return;
+      }
+    }
+    n.segSize = parsed;
+    const endEl = document.getElementById('pp-end');
+    if (endEl) endEl.value = segEndAddr(n);
+    renderCanvas(); updateStats(); return;
+  }
+
+  // ── all other fields (no validation needed) ──
+  n[k] = v;
   renderTree(); renderCanvas(); updateStats();
 }
 
 function deleteNode(id) { S.nodes=S.nodes.filter(n=>n.id!==id); if(S.selected===id)S.selected=null; renderTree(); renderCanvas(); renderProps(); updateStats(); status('Node deleted'); }
 
-function setView(btn) { document.querySelectorAll('.vbtn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); }
+function setView(btn) {
+  document.querySelectorAll('.canvas-bar .vbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  S.view = btn.textContent.trim().toLowerCase();
+  renderCanvas();
+}
 
 function toggleSnap(btn) {
   S.snapEnabled = !S.snapEnabled;
@@ -858,6 +1766,7 @@ function snapVal(v) {
   return S.snapEnabled ? Math.round(v / GRID) * GRID : v;
 }
 
+
 function newProject() {
   if (S.nodes.length>0 && !confirm('Create new project? Unsaved changes will be lost.')) return;
   Object.assign(S,{nodes:[],selected:null,project:'untitled',nextId:1});
@@ -865,10 +1774,9 @@ function newProject() {
 }
 
 function saveProject() {
-  const name=prompt('Project name:',S.project); if(!name)return;
-  S.project=name;
-  download(name+'.ubp', JSON.stringify({name,nodes:S.nodes,nextId:S.nextId},null,2));
-  updateStats(); status(`Project "${name}" saved`);
+  const name = S.project || 'untitled';
+  download(name + '.ubp', JSON.stringify({name, nodes:S.nodes, nextId:S.nextId}, null, 2));
+  status(`Project "${name}" saved`);
 }
 
 function loadProject() {
@@ -911,29 +1819,502 @@ function parseYAML(text) {
 }
 
 function generateCode(mode) {
-  if(!S.nodes.length){status('No nodes to generate code from','warn');return;}
-  const mal=S.nodes.filter(n=>n.layer==='mal'), ral=S.nodes.filter(n=>n.layer==='ral');
-  let c=`/**\n * uBuilder — Generated Code\n * Project : ${S.project}\n * Mode    : ${mode.toUpperCase()}\n */\n\n#ifndef UBUILDER_${S.project.toUpperCase()}_H\n#define UBUILDER_${S.project.toUpperCase()}_H\n\n#include <stdint.h>\n`;
-  if(mode==='simulation')c+=`#include "ubuilder_sim.h"\n`;
-  c+=`\n/* ── RAL — Register Abstraction Layer ── */\n`;
-  ral.forEach(n=>{c+=`\n/** ${n.desc||n.name} */\ntypedef struct {\n    volatile uint32_t VALUE;\n    volatile uint32_t MASK;\n    volatile uint32_t STATUS;\n} ${n.name}_reg_t;\n`;});
-  c+=`\n/* ── MAL — Microcontroller Abstraction Layer ── */\n`;
-  mal.forEach(n=>{c+=`\n/** ${n.desc||n.name} (${n.type}) */\nvoid ${n.name}_init(void);\nvoid ${n.name}_deinit(void);\nint  ${n.name}_configure(const ${n.name}_config_t *cfg);\n`;});
-  c+=`\n#endif /* UBUILDER_${S.project.toUpperCase()}_H */\n`;
-  download(`${S.project}_${mode}.h`,c); status(`C header generated — ${mode} mode`);
+  if (!S.nodes.length) { status('No nodes to generate code from', 'warn'); return; }
+  const mal = S.nodes.filter(n => n.layer === 'mal');
+  const ral = S.nodes.filter(n => n.layer === 'ral');
+  const proj = S.project.toUpperCase();
+  const ts = new Date().toISOString().slice(0,19).replace('T',' ');
+
+  const banner = (file) =>
+`/**
+ * uBuilder — microBuilder
+ * Project  : ${S.project}
+ * File     : ${file}
+ * Generated: ${ts}
+ * Mode     : ${mode.toUpperCase()}
+ */
+`;
+
+  /* ── helper: pad string to fixed width ── */
+  const pad = (s, n) => String(s).padEnd(n);
+
+  /* ════════════════════════════════════════════════
+   * 1. LINKER SCRIPT  ${S.project}_mal.ld
+   * ════════════════════════════════════════════════ */
+  const ramSegs    = mal.filter(n => n.memType === 'RAM');
+  const romSegs    = mal.filter(n => n.memType === 'ROM' || n.memType === 'FLASH');
+  const periphSegs = mal.filter(n => n.memType === 'PERIPH');
+
+  let ld = banner(`${S.project}_mal.ld`);
+  ld += `
+/* ── Memory regions ─────────────────────────────────────────────────── */
+MEMORY
+{
+`;
+  mal.forEach(n => {
+    const attr = (n.memType === 'RAM')                        ? 'rwx'
+               : (n.memType === 'ROM' || n.memType === 'FLASH') ? 'rx'
+               : 'rw';    /* PERIPH */
+    const desc = n.desc ? `  /* ${n.desc} */` : '';
+    ld += `    ${pad(n.name, 20)} (${attr}) : ORIGIN = ${n.segAddr}, LENGTH = ${toHex(Number(n.segSize))}${desc}\n`;
+  });
+  ld += `}
+
+/* ── Per-segment symbols (used by mal_fill / MAL_init) ──────────────── */
+`;
+  mal.forEach(n => {
+    const nm = n.name;
+    ld += `PROVIDE(__seg_${nm}_start = ORIGIN(${nm}));\n`;
+    ld += `PROVIDE(__seg_${nm}_size  = LENGTH(${nm}));\n`;
+    ld += `PROVIDE(__seg_${nm}_fill  = ${n.segDefault || '0x00'});\n`;
+    ld += `\n`;
+  });
+
+  ld += `SECTIONS\n{\n    /* ── Per-segment empty sections ─────────────────────────────────────── */\n`;
+  mal.forEach(n => {
+    ld += `    __sec_${n.name} : { } > ${n.name}\n`;
+  });
+  ld += `}\n`;
+
+  /* ════════════════════════════════════════════════
+   * 2. HEADER  ${S.project}_mal.h
+   * ════════════════════════════════════════════════ */
+  const guardName = `${S.project}_mal_h`.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+  let h = banner(`${S.project}_mal.h`);
+  h += `#ifndef ${guardName}
+#define ${guardName}
+
+#include <stdint.h>
+
+/* ── Linker-provided symbols (defined in ${S.project}_mal.ld) ── */
+`;
+  mal.forEach(n => {
+    h += `extern uint32_t __seg_${n.name}_start;\n`;
+    h += `extern uint32_t __seg_${n.name}_size;\n`;
+    h += `extern uint32_t __seg_${n.name}_fill;\n`;
+  });
+
+  h += `
+/* ── Segment descriptor ── */
+typedef struct {
+    uint32_t  addr;
+    uint32_t  size;
+    uint8_t   fill;
+    uint8_t   memtype;   /* MAL_MT_* */
+} mal_seg_t;
+
+/* Memory type IDs */
+#define MAL_MT_RAM    0u
+#define MAL_MT_ROM    1u
+#define MAL_MT_FLASH  2u
+#define MAL_MT_PERIPH 3u
+
+/* ── API ── */
+void MAL_init  (void);
+void mal_fill  (uint32_t addr, uint32_t size, uint8_t fill);
+
+`;
+
+  /* RAL structs */
+  if (ral.length) {
+    h += `/* ── RAL — Register Abstraction Layer ── */\n`;
+    ral.forEach(n => {
+      h += `\n/** ${n.desc || n.name} (${n.type}) */\n`;
+      if (n.type === 'bitfield') {
+        h += `typedef struct {\n    uint32_t value : 1;\n    uint32_t reserved : 31;\n} ${n.name}_t;\n`;
+      } else if (n.type === 'register_group' || n.type === 'peripheral_block') {
+        h += `typedef struct {\n    volatile uint32_t CTRL;\n    volatile uint32_t STATUS;\n    volatile uint32_t DATA;\n    volatile uint32_t reserved;\n} ${n.name}_t;\n`;
+      } else {
+        h += `typedef struct {\n    volatile uint32_t VALUE;\n    volatile uint32_t MASK;\n    volatile uint32_t STATUS;\n} ${n.name}_t;\n`;
+      }
+    });
+  }
+
+  h += `\n#endif /* ${guardName} */\n`;
+
+  /* ════════════════════════════════════════════════
+   * 3. TARGET C  ${S.project}_mal.c
+   * ════════════════════════════════════════════════ */
+  let c = banner(`${S.project}_mal.c`);
+  c += `#include "${S.project}_mal.h"
+
+/* ── Segment table (addresses come from linker symbols) ── */
+static const mal_seg_t _segs[] = {
+`;
+  mal.forEach(n => {
+    const mt = n.memType === 'RAM' ? 'MAL_MT_RAM'
+             : n.memType === 'ROM' ? 'MAL_MT_ROM'
+             : n.memType === 'FLASH' ? 'MAL_MT_FLASH'
+             : 'MAL_MT_PERIPH';
+    const desc = n.desc ? `${n.name} — ${n.desc}` : n.name;
+    c += `    /* ${desc} */\n`;
+    c += `    { (uint32_t)&__seg_${n.name}_start,\n`;
+    c += `      (uint32_t)&__seg_${n.name}_size,\n`;
+    c += `      (uint8_t) &__seg_${n.name}_fill,\n`;
+    c += `      ${mt} },\n`;
+  });
+  c += `};
+#define MAL_SEG_N (sizeof(_segs)/sizeof(_segs[0]))
+
+/* ── mal_fill: word-aligned, no libc dependency ── */
+void mal_fill(uint32_t addr, uint32_t size, uint8_t fill)
+{
+    uint32_t word = (uint32_t)fill * 0x01010101u;
+
+    uint8_t *p8 = (uint8_t *)addr;
+
+    /* align to 4 bytes */
+    while (((uintptr_t)p8 & 3u) && size) { *p8++ = fill; size--; }
+
+    /* fill 4 bytes at a time */
+    uint32_t *p32 = (uint32_t *)p8;
+    while (size >= 4u) { *p32++ = word; size -= 4u; }
+
+    /* trailing bytes */
+    p8 = (uint8_t *)p32;
+    while (size) { *p8++ = fill; size--; }
 }
 
-function download(filename, content) { const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type:'text/plain'})); a.download=filename; a.click(); }
+/* ── MAL_init: init all RAM segments with their fill byte ── */
+void MAL_init(void)
+{
+    for (uint32_t i = 0; i < MAL_SEG_N; i++) {
+        /* PERIPH segments are owned by RAL — skip */
+        if (_segs[i].memtype == MAL_MT_PERIPH) continue;
+        /* ROM/FLASH are read-only — skip */
+        if (_segs[i].memtype == MAL_MT_ROM)    continue;
+        if (_segs[i].memtype == MAL_MT_FLASH)  continue;
+
+        mal_fill(_segs[i].addr, _segs[i].size, _segs[i].fill);
+    }
+}
+
+`;
+
+  /* ════════════════════════════════════════════════
+   * 4. SIMULATION C  ${S.project}_mal_sim.c
+   * ════════════════════════════════════════════════ */
+  const totalSim = mal.reduce((s, n) => s + Number(n.segSize), 0);
+  const heapSize = toHex(Math.max(totalSim, 0x1000));
+
+  let sim = banner(`${S.project}_mal_sim.c`);
+  sim += `/* Simulation build — include instead of ${S.project}_mal.c */
+#include "${S.project}_mal.h"
+#include <stdio.h>
+#include <stddef.h>
+
+/* ── Simulated memory heap ── */
+#define SIM_HEAP_SIZE ${heapSize}u
+static uint8_t _sim_heap[SIM_HEAP_SIZE];
+
+typedef struct {
+    uint32_t  addr;
+    uint32_t  size;
+    uint8_t   fill;
+    uint8_t  *ptr;         /* pointer into _sim_heap */
+} sim_seg_t;
+
+static sim_seg_t _sim_segs[] = {
+`;
+  mal.forEach(n => {
+    const desc = n.desc ? `${n.name} — ${n.desc}` : n.name;
+    sim += `    /* ${desc} */\n`;
+    sim += `    { (uint32_t)&__seg_${n.name}_start,\n`;
+    sim += `      (uint32_t)&__seg_${n.name}_size,\n`;
+    sim += `      (uint8_t) &__seg_${n.name}_fill,\n`;
+    sim += `      NULL },\n`;
+  });
+  sim += `};
+#define SIM_SEG_N (sizeof(_sim_segs)/sizeof(_sim_segs[0]))
+
+/* ── mal_fill (simulation) ── */
+void mal_fill(uint32_t addr, uint32_t size, uint8_t fill)
+{
+    for (uint32_t i = 0; i < SIM_SEG_N; i++) {
+        if (addr >= _sim_segs[i].addr &&
+            addr <  _sim_segs[i].addr + _sim_segs[i].size) {
+            uint32_t off = addr - _sim_segs[i].addr;
+            uint8_t *p   = _sim_segs[i].ptr + off;
+            for (uint32_t b = 0; b < size; b++) p[b] = fill;
+            return;
+        }
+    }
+    fprintf(stderr, "[MAL-SIM] mal_fill: addr 0x%08X not mapped\\n", addr);
+}
+
+/* ── Simulated read/write API ── */
+uint8_t  MAL_read8 (uint32_t addr)            { return *_sim_ptr(addr);    }
+void     MAL_write8(uint32_t addr, uint8_t v) { *_sim_ptr(addr) = v;       }
+uint32_t MAL_read32(uint32_t addr)            { return *(uint32_t *)_sim_ptr(addr); }
+void     MAL_write32(uint32_t addr, uint32_t v){ *(uint32_t *)_sim_ptr(addr) = v;  }
+
+static uint8_t *_sim_ptr(uint32_t addr)
+{
+    for (uint32_t i = 0; i < SIM_SEG_N; i++)
+        if (addr >= _sim_segs[i].addr &&
+            addr <  _sim_segs[i].addr + _sim_segs[i].size)
+            return _sim_segs[i].ptr + (addr - _sim_segs[i].addr);
+    fprintf(stderr, "[MAL-SIM] unmapped addr 0x%08X\\n", addr);
+    return NULL;
+}
+
+/* ── MAL_init (simulation) ── */
+void MAL_init(void)
+{
+    uint8_t *heap = _sim_heap;
+    for (uint32_t i = 0; i < SIM_SEG_N; i++) {
+        _sim_segs[i].ptr = heap;
+        mal_fill(_sim_segs[i].addr, _sim_segs[i].size, _sim_segs[i].fill);
+        heap += _sim_segs[i].size;
+    }
+}
+
+`;
+
+  /* ── open export modal ── */
+  const files = mode === 'target'
+    ? [
+        [`${S.project}_mal.ld`,  ld],
+        [`${S.project}_mal.h`,   h],
+        [`${S.project}_mal.c`,   c],
+      ]
+    : [
+        [`${S.project}_mal.ld`,    ld],
+        [`${S.project}_mal.h`,     h],
+        [`${S.project}_mal_sim.c`, sim],
+      ];
+  openExportModal(`Generated — ${mode.toUpperCase()}`, files);
+  status(`${files.length} files generated — ${mode} mode`);
+}
+
+/* ── Export modal helpers ── */
+let _expFiles = [];
+
+function openExportModal(title, files) {
+  _expFiles = files;
+  document.getElementById('exp-title').textContent = title;
+
+  const tabs  = document.getElementById('exp-tabs');
+  const panes = document.getElementById('exp-panes');
+  tabs.innerHTML = '';
+  panes.innerHTML = '';
+
+  files.forEach(([name, content], idx) => {
+    const tab = document.createElement('button');
+    tab.className = 'exp-tab' + (idx === 0 ? ' active' : '');
+    tab.textContent = name.split('/').pop();
+    tab.onclick = () => expSelectTab(idx);
+    tabs.appendChild(tab);
+
+    const pane = document.createElement('div');
+    pane.className = 'exp-pane' + (idx === 0 ? ' active' : '');
+    pane.id = `exp-pane-${idx}`;
+    pane.innerHTML = `
+      <div class="exp-actions">
+        <button class="btn btn-ghost" style="font-size:11px" onclick="expCopy(${idx})">⎘ Copy</button>
+        <button class="btn btn-blue"  style="font-size:11px" onclick="expDownload(${idx})">⬇ ${name.split('/').pop()}</button>
+      </div>
+      <textarea class="exp-code" readonly></textarea>`;
+    pane.querySelector('textarea').value = content;
+    panes.appendChild(pane);
+  });
+
+  document.getElementById('modal-export').classList.add('open');
+}
+
+function expSelectTab(idx) {
+  document.querySelectorAll('.exp-tab').forEach((t, i)  => t.classList.toggle('active', i === idx));
+  document.querySelectorAll('.exp-pane').forEach((p, i) => p.classList.toggle('active', i === idx));
+}
+
+function expDownload(idx) {
+  download(_expFiles[idx][0], _expFiles[idx][1]);
+}
+
+function expDownloadZip() {
+  const enc = new TextEncoder();
+  const zipFiles = {};
+  _expFiles.forEach(([name, content]) => {
+    zipFiles[name.split('/').pop()] = enc.encode(content);
+  });
+  fflate.zip(zipFiles, { level: 6 }, (err, data) => {
+    if (err) { status('ZIP error: ' + err.message); return; }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([data], { type: 'application/zip' }));
+    a.download = `${S.project}_mal.zip`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); document.body.removeChild(a); }, 100);
+    status(`Downloaded ${S.project}_mal.zip (${_expFiles.length} files)`);
+  });
+}
+
+function expCopy(idx) {
+  navigator.clipboard.writeText(_expFiles[idx][1])
+    .then(() => status('Copied to clipboard'))
+    .catch(() => {
+      const ta = document.querySelector(`#exp-pane-${idx} textarea`);
+      ta.select(); document.execCommand('copy');
+      status('Copied to clipboard');
+    });
+}
+
+function download(filename, content) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], {type:'text/plain'}));
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); document.body.removeChild(a); }, 100);
+}
 function pickFile(accept, cb) { const i=document.createElement('input'); i.type='file'; i.accept=accept; i.onchange=e=>{const r=new FileReader();r.onload=ev=>cb(ev.target.result);r.readAsText(e.target.files[0]);}; i.click(); }
 
-document.addEventListener('keydown', e=>{
-  if(e.key==='Escape')closeModal();
-  if((e.key==='Delete'||e.key==='Backspace')&&S.selected&&document.activeElement===document.body)deleteNode(S.selected);
-});
-document.getElementById('modal-mal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal('modal-mal');});
-document.getElementById('modal-ral').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal('modal-ral');});
+document.addEventListener('DOMContentLoaded', () => {
+  const cscroll = document.getElementById('cscroll');
+  document.addEventListener('keydown', e=>{
+    if(e.key==='Escape') {
+      document.activeElement?.blur();
+      if (S.multiSel.size > 0 || S.selected !== null) { S.multiSel.clear(); S.selected=null; renderTree(); renderCanvas(); renderProps(); }
+      else closeModal();
+    }
+    if(e.key==='Delete'||e.key==='Backspace') {
+      const tag = document.activeElement?.tagName;
+      const isEditing = tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||document.activeElement?.isContentEditable;
+      if (isEditing) return;
+      e.preventDefault(); // prevent browser back-navigation on Backspace
+      if (S.multiSel.size > 0) {
+        askConfirmDeleteMulti([...S.multiSel]);
+      } else if (S.selected) {
+        askConfirmDelete(S.selected);
+      }
+    }
+  });
 
-updateStats();
+  // ── Pan: Space + drag or Middle mouse button ──
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && !e.repeat) {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      S.spaceDown = true;
+      cscroll.classList.add('pan-ready');
+      e.preventDefault();
+    }
+  });
+  document.addEventListener('keyup', e => {
+    if (e.code === 'Space') {
+      S.spaceDown = false;
+      cscroll.classList.remove('pan-ready', 'pan-active');
+    }
+  });
+  cscroll.addEventListener('mousedown', e => {
+    // Middle button pan
+    if (e.button === 1) {
+      S.pan = { startX: e.clientX, startY: e.clientY, scrollX: cscroll.scrollLeft, scrollY: cscroll.scrollTop };
+      cscroll.classList.add('pan-active');
+      e.preventDefault();
+      return;
+    }
+    if (e.button !== 0) return;
+    if (e.target.closest('.ub-card')) return;
+    // Ctrl/Cmd + left drag = rubber-band multi-selection
+    if (e.ctrlKey || e.metaKey) {
+      const r = cscroll.getBoundingClientRect();
+      const x0 = (e.clientX - r.left + cscroll.scrollLeft) / S.zoom;
+      const y0 = (e.clientY - r.top  + cscroll.scrollTop)  / S.zoom;
+      S.rubber = { x0, y0 };
+      S.multiSel.clear(); S.selected = null;
+      e.preventDefault();
+      return;
+    }
+    // Plain left drag on empty canvas = pan
+    S.pan = { startX: e.clientX, startY: e.clientY, scrollX: cscroll.scrollLeft, scrollY: cscroll.scrollTop };
+    cscroll.classList.add('pan-active');
+    e.preventDefault();
+  });
+
+
+
+
+
+  ['modal-mal','modal-ral','modal-export','modal-edit-mal','modal-edit-ral','modal-confirm'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', e => { if(e.target===e.currentTarget) closeModal(id); });
+  });
+
+  applyZoom();
+  updateStats();
+
+  // ── Panel resizers ──
+  function makeResizer(resizerId, panelId, side) {
+    const resizer = document.getElementById(resizerId);
+    const panel   = document.getElementById(panelId);
+    const MIN_W = 140, MAX_W = 520;
+    let startX, startW;
+
+    resizer.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      startX = e.clientX;
+      startW = panel.offsetWidth;
+      resizer.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+
+      function onMove(e) {
+        const delta = side === 'left' ? e.clientX - startX : startX - e.clientX;
+        const newW = Math.min(MAX_W, Math.max(MIN_W, startW + delta));
+        panel.style.width = newW + 'px';
+      }
+      function onUp() {
+        resizer.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+
+  makeResizer('resizer-left',  'left',  'left');
+  makeResizer('resizer-right', 'right', 'right');
+});
 </script>
+
+<!-- MODAL: Confirm Delete -->
+<div class="overlay" id="modal-confirm">
+  <div class="modal" style="min-width:320px;max-width:400px">
+    <div class="mhdr" style="color:var(--red)">
+      <span>⚠ Confirm Delete</span>
+      <button class="mx" onclick="closeModal('modal-confirm')">×</button>
+    </div>
+    <div class="mbody" style="padding:16px">
+      <p id="confirm-msg" style="font-size:13px;color:var(--text);line-height:1.6;margin:0"></p>
+    </div>
+    <div class="mfoot">
+      <button class="btn btn-ghost" onclick="closeModal('modal-confirm')">Cancel</button>
+      <button class="btn" id="confirm-ok-btn"
+        style="background:var(--red);color:#fff;border:none;padding:5px 18px;border-radius:var(--radius);cursor:pointer;font-size:12px;font-weight:600"
+        onclick="confirmDeleteOk()">Delete</button>
+    </div>
+  </div>
+</div>
+<!-- MODAL: Export / Generate -->
+<div class="overlay" id="modal-export">
+  <div class="modal exp-modal">
+    <div class="mhdr">
+      <span id="exp-title">Generated Files</span>
+      <button class="mx" onclick="closeModal('modal-export')">×</button>
+    </div>
+    <div class="exp-tabs" id="exp-tabs"></div>
+    <div id="exp-panes" style="flex:1;overflow:hidden;display:flex;flex-direction:column;"></div>
+    <div class="mfoot">
+      <button class="btn btn-ghost" onclick="closeModal('modal-export')">Close</button>
+      <button class="btn btn-blue" onclick="expDownloadZip()">⬇ Download all (.zip)</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
