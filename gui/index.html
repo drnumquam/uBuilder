@@ -255,8 +255,10 @@ body {
 .tree-memgrp.open .mg-chevron { transform: rotate(90deg); }
 .tree-memgrp.mg-RAM   { color: #ffd600; }
 .tree-memgrp.mg-ROM   { color: #ef5350; }
-.tree-memgrp.mg-FLASH { color: #ef5350; }
+.tree-memgrp.mg-FLASH { color: #ff40c0; }
 .tree-memgrp.mg-PERIPH{ color: #66bb6a; }
+.tree-memgrp.mg-RESERVED { color: #9e9e9e; }
+.tree-memgrp.mg-RESERVED { color: #9e9e9e; }
 .tree-memgrp-items { display: none; padding-left: 16px; }
 .tree-memgrp-items.open { display: block; }
 
@@ -341,7 +343,7 @@ body {
 
 .empty-state {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  height: calc(100vh - 160px); gap: 10px; pointer-events: none; user-select: none;
+  position: absolute; inset: 0; gap: 10px; pointer-events: none; user-select: none;
 }
 .empty-state .eicon { font-size: 36px; opacity: 0.1; }
 .empty-state p { font-size: 12px; color: var(--text3); }
@@ -359,9 +361,11 @@ body {
 .vbtn.snap-on { background: var(--bg4); color: var(--green); }
 /* Memory type border colors */
 .ub-card.mt-RAM   { border-color: #ffd600; }  /* yellow — RAM   */
-.ub-card.mt-ROM   { border-color: #ef5350; }  /* red — ROM   */
-.ub-card.mt-FLASH { border-color: #ef5350; }  /* red — FLASH */
+.ub-card.mt-ROM   { border-color: #ef5350; }  /* red   — ROM   */
+.ub-card.mt-FLASH { border-color: #ff40c0; }  /* fuschia — FLASH */
 .ub-card.mt-PERIPH   { border-color: #66bb6a; }  /* green — PERIPH */
+.ub-card.mt-RESERVED { border-color: #757575; }  /* grey  — RESERVED */
+.ub-card.mt-RESERVED { border-color: #757575; }  /* grey  — RESERVED */
 .ub-card.mt-RAM.sel-mal,
 .ub-card.mt-ROM.sel-mal,
 .ub-card.mt-FLASH.sel-mal,
@@ -369,12 +373,16 @@ body {
 /* Card header tint per memory type */
 .ch.mt-RAM   { background: #2a2700; }
 .ch.mt-ROM   { background: #2a1010; }
-.ch.mt-FLASH { background: #2a1010; }
+.ch.mt-FLASH { background: #2a0a20; }
 .ch.mt-PERIPH   { background: #182a18; }
+.ch.mt-RESERVED { background: #1e1e1e; }
+.ch.mt-RESERVED { background: #1e1e1e; }
 .ch.mt-RAM   .ctitle { color: #ffd600; }
 .ch.mt-ROM   .ctitle { color: #ef5350; }
-.ch.mt-FLASH .ctitle { color: #ef5350; }
+.ch.mt-FLASH .ctitle { color: #ff40c0; }
 .ch.mt-PERIPH   .ctitle { color: #66bb6a; }
+.ch.mt-RESERVED .ctitle { color: #9e9e9e; }
+.ch.mt-RESERVED .ctitle { color: #9e9e9e; }
 /* Memory type badge */
 .cbadge { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-family: var(--font-code); font-weight: 500; }
 .ub-card.sel-mal { border: 2px solid #ffffff; box-shadow: 0 0 0 3px #ffffff50, var(--shadow-lg); }
@@ -414,8 +422,10 @@ body {
 .ch.ral .cbadge { background: #1a3048; color: var(--cyan); }
 .cbadge.mt-RAM   { background: #2a2700 !important; color: #ffd600 !important; }
 .cbadge.mt-ROM   { background: #2a1010 !important; color: #ef5350 !important; }
-.cbadge.mt-FLASH { background: #2a1010 !important; color: #ef5350 !important; }
+.cbadge.mt-FLASH { background: #2a0a20 !important; color: #ff40c0 !important; }
 .cbadge.mt-PERIPH { background: #1a3a1a !important; color: #66bb6a !important; }
+.cbadge.mt-RESERVED { background: #2a2a2a !important; color: #9e9e9e !important; }
+.cbadge.mt-RESERVED { background: #2a2a2a !important; color: #9e9e9e !important; }
 .cbody { padding: 8px 12px; display: flex; flex-direction: column; gap: 3px; cursor: move; }
 .crow { display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 1px 0; }
 .ckey { color: var(--text3); font-family: var(--font-code); }
@@ -496,12 +506,13 @@ body {
     <button class="tb" onclick="newProject()">＋ New</button>
     <button class="tb" onclick="saveProject()">↓ Save</button>
     <button class="tb" onclick="loadProject()">↑ Load</button>
+    <button class="tb" onclick="importProject()">⊕ Import</button>
   </div>
   <div class="h-sep"></div>
-  <span class="h-label">MAL/RAL</span>
+  <span class="h-label">YAML</span>
   <div class="h-group">
-    <button class="tb" onclick="exportYAML()">Export YAML</button>
-    <button class="tb" onclick="importYAML()">Import YAML</button>
+    <button class="tb" onclick="exportYAML()">Export to</button>
+    <button class="tb" onclick="importYAML()">Import from</button>
   </div>
   <div class="h-sep"></div>
   <span class="h-label">Generate</span>
@@ -628,11 +639,12 @@ body {
       </div>
       <div class="prop-grp">
         <label class="prop-lbl">Memory Type</label>
-        <select class="prop-sel" id="mal-memtype">
+        <select class="prop-sel" id="mal-memtype" onchange="toggleFillField('mal-default-grp','mal-memtype')">
           <option value="RAM">RAM</option>
           <option value="ROM">ROM</option>
           <option value="FLASH">FLASH</option>
           <option value="PERIPH">PERIPH</option>
+          <option value="RESERVED">RESERVED</option>
         </select>
       </div>
       <div class="prop-grp">
@@ -645,7 +657,7 @@ body {
         <input class="prop-in" id="mal-size" placeholder="e.g. 256 or 0x100" oninput="clearFieldError('mal-size-err')" />
         <span class="field-err" id="mal-size-err"></span>
       </div>
-      <div class="prop-grp">
+      <div class="prop-grp" id="mal-default-grp">
         <label class="prop-lbl">Fill byte (hex)</label>
         <input class="prop-in" id="mal-default" placeholder="e.g. 0x00" />
       </div>
@@ -705,11 +717,12 @@ body {
       </div>
       <div class="prop-grp">
         <label class="prop-lbl">Memory Type</label>
-        <select class="prop-sel" id="edit-mal-memtype">
+        <select class="prop-sel" id="edit-mal-memtype" onchange="toggleFillField('edit-mal-default-grp','edit-mal-memtype')">
           <option value="RAM">RAM</option>
           <option value="ROM">ROM</option>
           <option value="FLASH">FLASH</option>
           <option value="PERIPH">PERIPH</option>
+          <option value="RESERVED">RESERVED</option>
         </select>
       </div>
       <div class="prop-grp">
@@ -722,7 +735,7 @@ body {
         <input class="prop-in" id="edit-mal-size" placeholder="e.g. 256 or 0x100" oninput="clearFieldError('edit-mal-size-err')" />
         <span class="field-err" id="edit-mal-size-err"></span>
       </div>
-      <div class="prop-grp">
+      <div class="prop-grp" id="edit-mal-default-grp">
         <label class="prop-lbl">Fill byte (hex)</label>
         <input class="prop-in" id="edit-mal-default" placeholder="e.g. 0x00" />
       </div>
@@ -976,16 +989,38 @@ function sortMal(dir, btn) {
 
   // Use the position of the card with the smallest address as the starting anchor
   const anchor = cardDims[0].n; // already sorted by address ascending
+  const GAP = GRID / 2; // half snap grid — used when segments are NOT memory-adjacent
+
+  // Check if two consecutive nodes are adjacent in address space
+  function memAdjacent(a, b) {
+    return parseHex(a.segAddr) + Number(a.segSize) === parseHex(b.segAddr);
+  }
 
   if (dir === 'v') {
     const baseX = anchor.x;
     let curY = anchor.y;
-    cardDims.forEach(({ n, h }) => { n.x = baseX; n.y = curY; curY += h; });
+    cardDims.forEach(({ n, h }, i) => {
+      n.x = baseX;
+      n.y = curY;
+      const next = cardDims[i + 1];
+      if (next) {
+        const gap = memAdjacent(n, next.n) ? 0 : GAP;
+        curY += h + gap;
+      }
+    });
     status('MAL sorted by address — vertical stack ↕');
   } else {
     const baseY = anchor.y;
     let curX = anchor.x;
-    cardDims.forEach(({ n, w }) => { n.x = curX; n.y = baseY; curX += w; });
+    cardDims.forEach(({ n, w }, i) => {
+      n.x = curX;
+      n.y = baseY;
+      const next = cardDims[i + 1];
+      if (next) {
+        const gap = memAdjacent(n, next.n) ? 0 : GAP;
+        curX += w + gap;
+      }
+    });
     status('MAL sorted by address — horizontal row ↔');
   }
 
@@ -1003,6 +1038,7 @@ function openAdd(layer) {
     document.getElementById('mal-size').value = '';
     document.getElementById('mal-default').value = '0x00';
     document.getElementById('mal-desc').value = '';
+    toggleFillField('mal-default-grp', 'mal-memtype');
     document.getElementById('modal-mal').classList.add('open');
     setTimeout(()=>document.getElementById('mal-id').focus(), 80);
   } else {
@@ -1151,6 +1187,7 @@ function openEdit(id) {
     document.getElementById('edit-mal-addr').value     = n.segAddr || '';
     document.getElementById('edit-mal-size').value     = n.segSize || '';
     document.getElementById('edit-mal-default').value  = n.segDefault || '0x00';
+    toggleFillField('edit-mal-default-grp', 'edit-mal-memtype');
     document.getElementById('edit-mal-desc').value     = n.desc || '';
     clearFieldError('edit-mal-id-err');
     clearFieldError('edit-mal-addr-err');
@@ -1280,10 +1317,18 @@ function segEndAddr(n) {
   return toHex(addr + size - 1);
 }
 
+function segSizeHuman(bytes) {
+  if (!bytes) return '—';
+  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(bytes % 1073741824 === 0 ? 0 : 2) + ' GB';
+  if (bytes >= 1048576)    return (bytes / 1048576   ).toFixed(bytes % 1048576    === 0 ? 0 : 2) + ' MB';
+  if (bytes >= 1024)       return (bytes / 1024      ).toFixed(bytes % 1024       === 0 ? 0 : 2) + ' KB';
+  return bytes + ' B';
+}
+
 function segSizeStr(n) {
   const size = Number(n.segSize);
   if (!size) return '—';
-  return toHex(size) + ' (' + size + ' B)';
+  return size + ' B  (' + segSizeHuman(size) + ')';
 }
 
 function renderCanvas() {
@@ -1346,8 +1391,15 @@ function renderCanvas() {
       if (n.layer === 'mal') {
         row('start', n.segAddr||'—');
         row('end',   segEndAddr(n));
-        row('size',  segSizeStr(n));
-        row('fill',  n.segDefault||'0x00');
+        const sz = Number(n.segSize);
+        row('size', sz ? toHex(sz) : '—');
+        if (sz) {
+          const sub = document.createElement('div');
+          sub.className = 'crow';
+          sub.innerHTML = `<span class="ckey" style="opacity:0"></span><span class="cval" style="opacity:0.55;font-size:10px">${segSizeStr(n)}</span>`;
+          cbody.appendChild(sub);
+        }
+
         descRow(n.desc);
       } else {
         row('type', n.type);
@@ -1358,8 +1410,8 @@ function renderCanvas() {
 
   // In MAL view: draw memory-type group labels as background banners
   if (S.view === 'mal') {
-    const MEM_TYPES = ['RAM','ROM','FLASH','PERIPH'];
-    const MT_COLORS = { RAM:'#ffd600', ROM:'#ef5350', FLASH:'#ef5350', PERIPH:'#66bb6a' };
+    const MEM_TYPES = ['RAM','ROM','FLASH','PERIPH','RESERVED'];
+    const MT_COLORS = { RAM:'#ffd600', ROM:'#ef5350', FLASH:'#ff40c0', PERIPH:'#66bb6a', RESERVED:'#757575' };
     MEM_TYPES.forEach(mt => {
       const group = visibleNodes.filter(n => (n.memType||'RAM') === mt);
       if (group.length === 0) return;
@@ -1581,6 +1633,7 @@ document.addEventListener('mouseup', e => {
 // ── Tooltip for desc fields ──
 let _confirmDeleteId  = null;
 let _confirmDeleteIds = null; // multi-delete
+let _confirmCallback  = null; // generic confirm callback
 
 function askConfirmDelete(nodeId) {
   const node = S.nodes.find(n => n.id === nodeId);
@@ -1604,6 +1657,15 @@ function askConfirmDeleteMulti(ids) {
 
 function confirmDeleteOk() {
   closeModal('modal-confirm');
+  if (_confirmCallback !== null) {
+    const cb = _confirmCallback; _confirmCallback = null;
+    // Reset button style
+    const okBtn = document.getElementById('confirm-ok-btn');
+    okBtn.textContent = 'Delete';
+    okBtn.style.background = '';
+    cb();
+    return;
+  }
   if (_confirmDeleteIds !== null) {
     const ids = _confirmDeleteIds; _confirmDeleteIds = null;
     S.multiSel.clear();
@@ -1646,12 +1708,16 @@ function renderProps() {
   if (!n) { body.innerHTML=`<div class="prop-empty"><div class="peicon">◫</div><p>Select a node<br>to edit its properties</p></div>`; return; }
   const malProps = n.layer==='mal' ? `
     <div class="prop-grp"><label class="prop-lbl">Segment ID <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-name" value="${n.name}" onblur="setProp('name',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-name-err')"/><span class="field-err" id="pp-name-err"></span></div>
-    <div class="prop-grp"><label class="prop-lbl">Memory Type</label><select class="prop-sel" onchange="setProp('memType',this.value)">${['RAM','ROM','FLASH','PERIPH'].map(t=>`<option value="${t}"${t===n.memType?' selected':''}>${t}</option>`).join('')}</select></div>
+    <div class="prop-grp"><label class="prop-lbl">Memory Type</label><select class="prop-sel" onchange="setProp('memType',this.value);renderProps()">${['RAM','ROM','FLASH','PERIPH','RESERVED'].map(t=>`<option value="${t}"${t===n.memType?' selected':''}>${t}</option>`).join('')}</select></div>
     <div class="prop-grp"><label class="prop-lbl">Start Address (hex) <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-addr" value="${n.segAddr||''}" placeholder="0x40020000" onblur="setProp('segAddr',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-addr-err')"/><span class="field-err" id="pp-addr-err"></span></div>
     <div class="prop-grp"><label class="prop-lbl">End Address</label><input class="prop-in" id="pp-end" value="${segEndAddr(n)}" disabled style="opacity:0.6"/></div>
-    <div class="prop-grp"><label class="prop-lbl">Size (dec or hex) <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-size" value="${n.segSize!==undefined&&n.segSize!==''?n.segSize:''}" placeholder="256 or 0x100" onblur="setProp('segSize',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-size-err')"/><span class="field-err" id="pp-size-err"></span></div>
-    <div class="prop-grp"><label class="prop-lbl">Size (hex)</label><input class="prop-in" value="${segSizeStr(n)}" disabled style="opacity:0.6"/></div>
-    <div class="prop-grp"><label class="prop-lbl">Fill byte (hex)</label><input class="prop-in" value="${n.segDefault||'0x00'}" oninput="setProp('segDefault',this.value)" placeholder="0x00"/></div>
+    <div class="prop-grp">
+      <label class="prop-lbl">Size (hex) <span style="color:var(--red)">*</span></label>
+      <input class="prop-in" id="pp-size" value="${n.segSize!==undefined&&n.segSize!==''?toHex(Number(n.segSize)):''}" placeholder="0x100" onblur="setProp('segSize',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-size-err')"/>
+      <input class="prop-in" value="${segSizeStr(n)}" disabled style="opacity:0.45;margin-top:3px;font-size:11px;padding:3px 8px;"/>
+      <span class="field-err" id="pp-size-err"></span>
+    </div>
+
     <div class="prop-grp"><label class="prop-lbl">Description</label><input class="prop-in" value="${n.desc}" oninput="setProp('desc',this.value)" placeholder="Description..."/></div>
   ` : `
     <div class="prop-grp"><label class="prop-lbl">Name <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-name" value="${n.name}" onblur="setProp('name',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-name-err')"/><span class="field-err" id="pp-name-err"></span></div>
@@ -1768,9 +1834,25 @@ function snapVal(v) {
 
 
 function newProject() {
-  if (S.nodes.length>0 && !confirm('Create new project? Unsaved changes will be lost.')) return;
-  Object.assign(S,{nodes:[],selected:null,project:'untitled',nextId:1});
-  renderTree(); renderCanvas(); renderProps(); updateStats(); status('New project created');
+  if (!S.nodes.length) {
+    _doNewProject();
+    return;
+  }
+  _confirmCallback = _doNewProject;
+  document.getElementById('confirm-msg').innerHTML =
+    '<strong>Create a new project?</strong><br><br>The current canvas has <strong>' +
+    S.nodes.length + ' node' + (S.nodes.length !== 1 ? 's' : '') +
+    '</strong>. All unsaved changes will be lost.';
+  const okBtn = document.getElementById('confirm-ok-btn');
+  okBtn.textContent = 'New Project';
+  okBtn.style.background = 'var(--blue-soft)';
+  document.getElementById('modal-confirm').classList.add('open');
+}
+
+function _doNewProject() {
+  Object.assign(S, {nodes:[], selected:null, multiSel:new Set(), project:'untitled', nextId:1});
+  renderTree(); renderCanvas(); renderProps(); updateStats();
+  status('New project created');
 }
 
 function saveProject() {
@@ -1787,6 +1869,101 @@ function loadProject() {
       Object.assign(S,{nodes,project:d.name||'untitled',nextId:d.nextId||1,selected:null});
       renderTree(); renderCanvas(); renderProps(); updateStats(); status(`Project "${S.project}" loaded`);
     } catch { status('Invalid project file','err'); }
+  });
+}
+
+function importProject() {
+  pickFile('.ubp,.json', text => {
+    try {
+      const d = JSON.parse(text);
+      const incoming = (d.nodes || []).map(n => ({...n, segSize: n.segSize ? Number(n.segSize) : 0}));
+      const incomingMal = incoming.filter(n => n.layer === 'mal');
+      const incomingRal = incoming.filter(n => n.layer === 'ral');
+      const existingMal = S.nodes.filter(n => n.layer === 'mal');
+      const existingRal = S.nodes.filter(n => n.layer === 'ral');
+
+      const conflicts = [];
+
+      // ── Name conflicts ──
+      incoming.forEach(n => {
+        if (S.nodes.some(e => e.name === n.name)) {
+          conflicts.push(`Name conflict: "${n.name}" already exists`);
+        }
+      });
+
+      // ── Address/size overlap (MAL only) ──
+      incomingMal.forEach(imp => {
+        const impAddr = parseHex(imp.segAddr);
+        const impSize = Number(imp.segSize);
+        if (isNaN(impAddr) || impSize <= 0) return;
+        existingMal.forEach(ex => {
+          const exAddr = parseHex(ex.segAddr);
+          const exSize = Number(ex.segSize);
+          if (!isNaN(exAddr) && exSize > 0 && segmentsOverlap(impAddr, impSize, exAddr, exSize)) {
+            conflicts.push(`Address overlap: "${imp.name}" [${imp.segAddr}+${toHex(impSize)}] overlaps "${ex.name}" [${ex.segAddr}+${toHex(exSize)}]`);
+          }
+        });
+        // Also check incoming vs incoming
+        incomingMal.forEach(other => {
+          if (other === imp) return;
+          const oAddr = parseHex(other.segAddr);
+          const oSize = Number(other.segSize);
+          if (!isNaN(oAddr) && oSize > 0 && segmentsOverlap(impAddr, impSize, oAddr, oSize)) {
+            const key = [imp.name, other.name].sort().join('|');
+            const msg = `Address overlap in import: "${imp.name}" overlaps "${other.name}"`;
+            if (!conflicts.includes(msg)) conflicts.push(msg);
+          }
+        });
+      });
+
+      if (conflicts.length > 0) {
+        const msg = 'Import blocked — conflicts found:\n\n' + conflicts.slice(0, 10).join('\n') +
+          (conflicts.length > 10 ? `\n…and ${conflicts.length - 10} more` : '');
+        alert(msg);
+        status(`Import failed: ${conflicts.length} conflict(s) found`, 'err');
+        return;
+      }
+
+      // ── Compute canvas bounding box of existing nodes ──
+      // Place imported nodes to the right of (or below) existing content
+      let maxX = 0, maxY = 0;
+      S.nodes.forEach(n => {
+        const el = document.querySelector(`[data-id="${n.id}"]`);
+        const w = el ? el.offsetWidth  : 224;
+        const h = el ? el.offsetHeight : 96;
+        maxX = Math.max(maxX, n.x + w);
+        maxY = Math.max(maxY, n.y + h);
+      });
+
+      // Compute bounding box of incoming nodes
+      let inMinX = Infinity, inMinY = Infinity;
+      incoming.forEach(n => { inMinX = Math.min(inMinX, n.x); inMinY = Math.min(inMinY, n.y); });
+      if (!isFinite(inMinX)) inMinX = 0;
+      if (!isFinite(inMinY)) inMinY = 0;
+
+      // Offset: place incoming content to the right with a gap
+      const GAP = GRID * 4;
+      const offsetX = S.nodes.length > 0 ? (maxX + GAP - inMinX) : 0;
+      const offsetY = S.nodes.length > 0 ? 0 : 0;
+
+      // ── Merge nodes with new IDs and offset positions ──
+      const idRemap = {};
+      incoming.forEach(n => {
+        const newId = S.nextId++;
+        idRemap[n.id] = newId;
+        S.nodes.push({
+          ...n,
+          id: newId,
+          x: Math.max(0, n.x + offsetX),
+          y: Math.max(0, n.y + offsetY),
+        });
+      });
+
+      renderTree(); renderCanvas(); renderProps(); updateStats();
+      status(`Imported ${incoming.length} node(s) from "${d.name || 'unknown'}"`);
+    } catch(e) {
+      status('Invalid project file', 'err');
+    }
   });
 }
 
@@ -1816,6 +1993,12 @@ function parseYAML(text) {
     const tm=line.match(/^\s+type:\s*(.+)/); if(tm){cur.type=tm[1].trim();return;}
     const dm=line.match(/^\s+desc:\s*"?([^"]*)"?/); if(dm)cur.desc=dm[1].trim();
   });
+}
+
+function toggleFillField(grpId, selectId) {
+  const grp = document.getElementById(grpId);
+  if (!grp) return;
+  grp.style.display = 'none';
 }
 
 function generateCode(mode) {
@@ -1852,8 +2035,9 @@ MEMORY
 {
 `;
   mal.forEach(n => {
-    const attr = (n.memType === 'RAM')                        ? 'rwx'
-               : (n.memType === 'ROM' || n.memType === 'FLASH') ? 'rx'
+    const attr = (n.memType === 'RAM')                          ? 'rwx'
+               : (n.memType === 'ROM' || n.memType === 'FLASH')   ? 'rx'
+               : (n.memType === 'RESERVED')                       ? 'r'
                : 'rw';    /* PERIPH */
     const desc = n.desc ? `  /* ${n.desc} */` : '';
     ld += `    ${pad(n.name, 20)} (${attr}) : ORIGIN = ${n.segAddr}, LENGTH = ${toHex(Number(n.segSize))}${desc}\n`;
@@ -1866,15 +2050,18 @@ MEMORY
     const nm = n.name;
     ld += `PROVIDE(__seg_${nm}_start = ORIGIN(${nm}));\n`;
     ld += `PROVIDE(__seg_${nm}_size  = LENGTH(${nm}));\n`;
-    ld += `PROVIDE(__seg_${nm}_fill  = ${n.segDefault || '0x00'});\n`;
     ld += `\n`;
   });
 
-  ld += `SECTIONS\n{\n    /* ── Per-segment empty sections ─────────────────────────────────────── */\n`;
-  mal.forEach(n => {
-    ld += `    __sec_${n.name} : { } > ${n.name}\n`;
-  });
-  ld += `}\n`;
+  // Only RAM and FLASH segments get an empty section (ROM and PERIPH have no runtime init)
+  const initSegs = mal.filter(n => n.memType === 'RAM' || n.memType === 'FLASH'); // ROM, PERIPH, RESERVED excluded
+  if (initSegs.length) {
+    ld += `SECTIONS\n{\n    /* ── Per-segment empty sections (RAM and FLASH only) ── */\n`;
+    initSegs.forEach(n => {
+      ld += `    __sec_${n.name} : { } > ${n.name}\n`;
+    });
+    ld += `}\n`;
+  }
 
   /* ════════════════════════════════════════════════
    * 2. HEADER  ${S.project}_mal.h
@@ -1891,27 +2078,37 @@ MEMORY
   mal.forEach(n => {
     h += `extern uint32_t __seg_${n.name}_start;\n`;
     h += `extern uint32_t __seg_${n.name}_size;\n`;
-    h += `extern uint32_t __seg_${n.name}_fill;\n`;
   });
 
   h += `
 /* ── Segment descriptor ── */
 typedef struct {
-    uint32_t  addr;
-    uint32_t  size;
-    uint8_t   fill;
-    uint8_t   memtype;   /* MAL_MT_* */
+    uint32_t      addr;
+    uint32_t      size;
+    mal_memtype_t memtype; /* MAL_MT_* */
 } mal_seg_t;
 
 /* Memory type IDs */
-#define MAL_MT_RAM    0u
-#define MAL_MT_ROM    1u
-#define MAL_MT_FLASH  2u
-#define MAL_MT_PERIPH 3u
+typedef enum {
+    MAL_MT_RAM      = 0u,
+    MAL_MT_ROM      = 1u,
+    MAL_MT_FLASH    = 2u,
+    MAL_MT_PERIPH   = 3u,
+    MAL_MT_RESERVED = 4u
+} mal_memtype_t;
+
+/* ── Error codes ── */
+typedef enum {
+    MAL_OK              = 0,  /**< Operation successful                  */
+    MAL_ERR_NOT_FOUND   = 1,  /**< Address not mapped to any segment     */
+    MAL_ERR_READONLY    = 2,  /**< Segment is read-only (ROM or FLASH)   */
+    MAL_ERR_PERIPH      = 3,  /**< Segment is a peripheral — not fillable */
+    MAL_ERR_RESERVED    = 4   /**< Segment is reserved — no access allowed */
+} mal_err_t;
 
 /* ── API ── */
-void MAL_init  (void);
-void mal_fill  (uint32_t addr, uint32_t size, uint8_t fill);
+void      MAL_init (void);
+mal_err_t mal_fill (uint32_t addr, uint32_t size, uint8_t fill);
 
 `;
 
@@ -1942,26 +2139,42 @@ void mal_fill  (uint32_t addr, uint32_t size, uint8_t fill);
 static const mal_seg_t _segs[] = {
 `;
   mal.forEach(n => {
-    const mt = n.memType === 'RAM' ? 'MAL_MT_RAM'
-             : n.memType === 'ROM' ? 'MAL_MT_ROM'
-             : n.memType === 'FLASH' ? 'MAL_MT_FLASH'
-             : 'MAL_MT_PERIPH';
+    const mt = n.memType === 'RAM'      ? 'MAL_MT_RAM'
+             : n.memType === 'ROM'      ? 'MAL_MT_ROM'
+             : n.memType === 'FLASH'    ? 'MAL_MT_FLASH'
+             : n.memType === 'PERIPH'   ? 'MAL_MT_PERIPH'
+             : 'MAL_MT_RESERVED';
     const desc = n.desc ? `${n.name} — ${n.desc}` : n.name;
     c += `    /* ${desc} */\n`;
     c += `    { (uint32_t)&__seg_${n.name}_start,\n`;
     c += `      (uint32_t)&__seg_${n.name}_size,\n`;
-    c += `      (uint8_t) &__seg_${n.name}_fill,\n`;
     c += `      ${mt} },\n`;
   });
   c += `};
 #define MAL_SEG_N (sizeof(_segs)/sizeof(_segs[0]))
 
 /* ── mal_fill: word-aligned, no libc dependency ── */
-void mal_fill(uint32_t addr, uint32_t size, uint8_t fill)
+mal_err_t mal_fill(uint32_t addr, uint32_t size, uint8_t fill)
 {
-    uint32_t word = (uint32_t)fill * 0x01010101u;
+    /* ── Lookup segment and check permissions ── */
+    const mal_seg_t *seg = NULL;
+    for (uint32_t i = 0; i < MAL_SEG_N; i++) {
+        if (addr >= _segs[i].addr &&
+            addr <  _segs[i].addr + _segs[i].size) {
+            seg = &_segs[i];
+            break;
+        }
+    }
 
-    uint8_t *p8 = (uint8_t *)addr;
+    if (seg == NULL)                            return MAL_ERR_NOT_FOUND;
+    if (seg->memtype == MAL_MT_ROM      ||
+        seg->memtype == MAL_MT_FLASH    ||
+        seg->memtype == MAL_MT_RESERVED)        return MAL_ERR_READONLY;
+    if (seg->memtype == MAL_MT_PERIPH)          return MAL_ERR_PERIPH;
+
+    /* ── Write: word-aligned fill, no libc dependency ── */
+    uint32_t word = (uint32_t)fill * 0x01010101u;
+    uint8_t *p8   = (uint8_t *)addr;
 
     /* align to 4 bytes */
     while (((uintptr_t)p8 & 3u) && size) { *p8++ = fill; size--; }
@@ -1973,20 +2186,16 @@ void mal_fill(uint32_t addr, uint32_t size, uint8_t fill)
     /* trailing bytes */
     p8 = (uint8_t *)p32;
     while (size) { *p8++ = fill; size--; }
+
+    return MAL_OK;
 }
 
-/* ── MAL_init: init all RAM segments with their fill byte ── */
+/* ── MAL_init: placeholder — RAM segments must be filled explicitly via mal_fill() ── */
 void MAL_init(void)
 {
-    for (uint32_t i = 0; i < MAL_SEG_N; i++) {
-        /* PERIPH segments are owned by RAL — skip */
-        if (_segs[i].memtype == MAL_MT_PERIPH) continue;
-        /* ROM/FLASH are read-only — skip */
-        if (_segs[i].memtype == MAL_MT_ROM)    continue;
-        if (_segs[i].memtype == MAL_MT_FLASH)  continue;
-
-        mal_fill(_segs[i].addr, _segs[i].size, _segs[i].fill);
-    }
+    /* Nothing to do here.
+     * RAM segments are not automatically zeroed or filled.
+     * Call mal_fill(addr, size, byte) explicitly for each segment. */
 }
 
 `;
@@ -2010,7 +2219,7 @@ static uint8_t _sim_heap[SIM_HEAP_SIZE];
 typedef struct {
     uint32_t  addr;
     uint32_t  size;
-    uint8_t   fill;
+    uint8_t   memtype;     /* MAL_MT_* */
     uint8_t  *ptr;         /* pointer into _sim_heap */
 } sim_seg_t;
 
@@ -2019,27 +2228,45 @@ static sim_seg_t _sim_segs[] = {
   mal.forEach(n => {
     const desc = n.desc ? `${n.name} — ${n.desc}` : n.name;
     sim += `    /* ${desc} */\n`;
+    const smt = n.memType === 'RAM'      ? 'MAL_MT_RAM'
+             : n.memType === 'ROM'      ? 'MAL_MT_ROM'
+             : n.memType === 'FLASH'    ? 'MAL_MT_FLASH'
+             : n.memType === 'PERIPH'   ? 'MAL_MT_PERIPH'
+             : 'MAL_MT_RESERVED';
     sim += `    { (uint32_t)&__seg_${n.name}_start,\n`;
     sim += `      (uint32_t)&__seg_${n.name}_size,\n`;
-    sim += `      (uint8_t) &__seg_${n.name}_fill,\n`;
+    sim += `      ${smt},\n`;
     sim += `      NULL },\n`;
   });
   sim += `};
 #define SIM_SEG_N (sizeof(_sim_segs)/sizeof(_sim_segs[0]))
 
 /* ── mal_fill (simulation) ── */
-void mal_fill(uint32_t addr, uint32_t size, uint8_t fill)
+mal_err_t mal_fill(uint32_t addr, uint32_t size, uint8_t fill)
 {
     for (uint32_t i = 0; i < SIM_SEG_N; i++) {
         if (addr >= _sim_segs[i].addr &&
             addr <  _sim_segs[i].addr + _sim_segs[i].size) {
+
+            if (_sim_segs[i].memtype == MAL_MT_ROM      ||
+                _sim_segs[i].memtype == MAL_MT_FLASH    ||
+                _sim_segs[i].memtype == MAL_MT_RESERVED) {
+                fprintf(stderr, "[MAL-SIM] mal_fill: READONLY segment at 0x%08X (ROM/FLASH/RESERVED)\\n", addr);
+                return MAL_ERR_READONLY;
+            }
+            if (_sim_segs[i].memtype == MAL_MT_PERIPH) {
+                fprintf(stderr, "[MAL-SIM] mal_fill: PERIPH segment at 0x%08X — use RAL\\n", addr);
+                return MAL_ERR_PERIPH;
+            }
+
             uint32_t off = addr - _sim_segs[i].addr;
             uint8_t *p   = _sim_segs[i].ptr + off;
             for (uint32_t b = 0; b < size; b++) p[b] = fill;
-            return;
+            return MAL_OK;
         }
     }
     fprintf(stderr, "[MAL-SIM] mal_fill: addr 0x%08X not mapped\\n", addr);
+    return MAL_ERR_NOT_FOUND;
 }
 
 /* ── Simulated read/write API ── */
@@ -2058,13 +2285,12 @@ static uint8_t *_sim_ptr(uint32_t addr)
     return NULL;
 }
 
-/* ── MAL_init (simulation) ── */
+/* ── MAL_init (simulation): allocate heap slices, no auto-fill ── */
 void MAL_init(void)
 {
     uint8_t *heap = _sim_heap;
     for (uint32_t i = 0; i < SIM_SEG_N; i++) {
         _sim_segs[i].ptr = heap;
-        mal_fill(_sim_segs[i].addr, _sim_segs[i].size, _sim_segs[i].fill);
         heap += _sim_segs[i].size;
     }
 }
@@ -2236,7 +2462,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-  ['modal-mal','modal-ral','modal-export','modal-edit-mal','modal-edit-ral','modal-confirm'].forEach(id => {
+  document.getElementById('modal-confirm').addEventListener('click', e => {
+  if (e.target === e.currentTarget) {
+    _confirmCallback = null;
+    document.getElementById('confirm-ok-btn').textContent = 'Delete';
+    document.getElementById('confirm-ok-btn').style.background = '';
+  }
+});
+
+['modal-mal','modal-ral','modal-export','modal-edit-mal','modal-edit-ral','modal-confirm'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('click', e => { if(e.target===e.currentTarget) closeModal(id); });
   });
