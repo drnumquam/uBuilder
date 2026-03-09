@@ -256,7 +256,7 @@ body {
 .tree-memgrp.mg-RAM   { color: #ffd600; }
 .tree-memgrp.mg-ROM   { color: #ef5350; }
 .tree-memgrp.mg-FLASH { color: #ff40c0; }
-.tree-memgrp.mg-PERIPH{ color: #66bb6a; }
+.tree-memgrp.mg-MMIO{ color: #4caf50; }
 .tree-memgrp.mg-RESERVED { color: #9e9e9e; }
 .tree-memgrp.mg-RESERVED { color: #9e9e9e; }
 .tree-memgrp-items { display: none; padding-left: 16px; }
@@ -279,9 +279,10 @@ body {
 .tree-item:hover .ti-del { opacity: 1; }
 .ti-del:hover { color: var(--red) !important; }
 
-.tree-add { display: flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: var(--radius); cursor: pointer; font-size: 11px; color: var(--text3); transition: color 0.1s, background 0.1s; }
-.tree-add:hover { color: var(--blue); background: var(--bg3); }
-.tree-add.ral:hover { color: var(--cyan); }
+.tree-add { display: flex; align-items: center; gap: 5px; padding: 5px 8px; border-radius: var(--radius); cursor: pointer; font-size: 11px; font-weight: 600; color: #fff; background: var(--blue-soft); border: 1px solid var(--blue-dim); transition: background 0.1s; margin: 3px 4px; }
+.tree-add:hover { background: var(--blue); color: #fff; }
+.tree-add.ral { background: var(--cyan-dim); border-color: var(--cyan-dim); color: #e0f7ff; }
+.tree-add.ral:hover { background: #1a7aa0; color: #fff; }
 
 /* RESIZER */
 .resizer {
@@ -344,6 +345,7 @@ body {
 .empty-state {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   position: absolute; inset: 0; gap: 10px; pointer-events: none; user-select: none;
+  z-index: 5;
 }
 .empty-state .eicon { font-size: 36px; opacity: 0.1; }
 .empty-state p { font-size: 12px; color: var(--text3); }
@@ -351,7 +353,7 @@ body {
 
 /* CARDS */
 .ub-card {
-  position: absolute; background: var(--bg2); border: 1px solid var(--border2);
+  position: absolute; background: var(--bg2); border: 2px solid var(--border2);
   border-radius: 6px; width: 224px; box-shadow: var(--shadow);
   transition: box-shadow 0.15s, border-color 0.15s;
   user-select: none;
@@ -360,34 +362,39 @@ body {
 .ub-card.overlap { border-color: var(--red) !important; box-shadow: 0 0 0 2px #ef535040, var(--shadow-lg) !important; }
 .vbtn.snap-on { background: var(--bg4); color: var(--green); }
 /* Memory type border colors */
-.ub-card.mt-RAM   { border-color: #ffd600; }  /* yellow — RAM   */
-.ub-card.mt-ROM   { border-color: #ef5350; }  /* red   — ROM   */
-.ub-card.mt-FLASH { border-color: #ff40c0; }  /* fuschia — FLASH */
-.ub-card.mt-PERIPH   { border-color: #66bb6a; }  /* green — PERIPH */
-.ub-card.mt-RESERVED { border-color: #757575; }  /* grey  — RESERVED */
-.ub-card.mt-RESERVED { border-color: #757575; }  /* grey  — RESERVED */
+.ub-card.mt-RAM      { border-color: #ffd600; }
+.ub-card.mt-ROM      { border-color: #ef5350; }
+.ub-card.mt-FLASH    { border-color: #ff40c0; }
+.ub-card.mt-MMIO     { border-color: #2e7d32; }  /* dark green — MMIO segment */
+.ub-card.mt-INTERNAL { border-color: #6b8aff; }  /* blue — INTERNAL register */
+.ub-card.mt-RESERVED { border-color: #757575; }
+/* RAL registers get light green border */
+.ub-card.ral-mmio-reg { border-color: #a5d6a7; }  /* light green — MMIO register */
 .ub-card.mt-RAM.sel-mal,
 .ub-card.mt-ROM.sel-mal,
 .ub-card.mt-FLASH.sel-mal,
-.ub-card.mt-PERIPH.sel-mal { border: 2px solid #ffffff !important; box-shadow: 0 0 0 3px #ffffff50, var(--shadow-lg) !important; }
+.ub-card.mt-MMIO.sel-mal { border: 4px solid #ffffff !important; box-shadow: 0 0 0 3px #ffffff50, var(--shadow-lg) !important; }
 /* Card header tint per memory type */
-.ch.mt-RAM   { background: #2a2700; }
-.ch.mt-ROM   { background: #2a1010; }
-.ch.mt-FLASH { background: #2a0a20; }
-.ch.mt-PERIPH   { background: #182a18; }
+.ch.mt-RAM      { background: #2a2700; }
+.ch.mt-ROM      { background: #2a1010; }
+.ch.mt-FLASH    { background: #2a0a20; }
+.ch.mt-MMIO     { background: #0d1f0d; }   /* dark green bg — MAL MMIO segment */
+.ch.mt-INTERNAL { background: #1a1e38; }
 .ch.mt-RESERVED { background: #1e1e1e; }
-.ch.mt-RESERVED { background: #1e1e1e; }
-.ch.mt-RAM   .ctitle { color: #ffd600; }
-.ch.mt-ROM   .ctitle { color: #ef5350; }
-.ch.mt-FLASH .ctitle { color: #ff40c0; }
-.ch.mt-PERIPH   .ctitle { color: #66bb6a; }
+/* RAL MMIO register header — light green tint */
+.ch.ral-mmio-reg { background: #1a2e1a; }
+.ch.mt-RAM      .ctitle { color: #ffd600; }
+.ch.mt-ROM      .ctitle { color: #ef5350; }
+.ch.mt-FLASH    .ctitle { color: #ff40c0; }
+.ch.mt-MMIO     .ctitle { color: #2e7d32; }   /* dark green — MAL segment title */
+.ch.mt-INTERNAL .ctitle { color: #6b8aff; }
 .ch.mt-RESERVED .ctitle { color: #9e9e9e; }
-.ch.mt-RESERVED .ctitle { color: #9e9e9e; }
+.ch.ral-mmio-reg .ctitle { color: #a5d6a7; }  /* light green — RAL register title */
 /* Memory type badge */
 .cbadge { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-family: var(--font-code); font-weight: 500; }
-.ub-card.sel-mal { border: 2px solid #ffffff; box-shadow: 0 0 0 3px #ffffff50, var(--shadow-lg); }
-.ub-card.sel-ral { border: 2px solid #ffffff; box-shadow: 0 0 0 3px #ffffff50, var(--shadow-lg); }
-.ub-card.sel-multi { border: 2px solid var(--cyan) !important; box-shadow: 0 0 0 3px #4fc3f740, var(--shadow-lg) !important; }
+.ub-card.sel-mal { border: 4px solid #ffffff; box-shadow: 0 0 0 3px #ffffff50, var(--shadow-lg); }
+.ub-card.sel-ral { border: 4px solid #ffffff; box-shadow: 0 0 0 3px #ffffff50, var(--shadow-lg); }
+.ub-card.sel-multi { border: 4px solid var(--cyan) !important; box-shadow: 0 0 0 3px #4fc3f740, var(--shadow-lg) !important; }
 
 /* Rubber-band selection rect */
 #rubber-band {
@@ -420,12 +427,13 @@ body {
 .ch.ral .ctitle { color: var(--cyan); }
 .ch.mal .cbadge { background: #2a3060; color: var(--blue); }
 .ch.ral .cbadge { background: #1a3048; color: var(--cyan); }
-.cbadge.mt-RAM   { background: #2a2700 !important; color: #ffd600 !important; }
-.cbadge.mt-ROM   { background: #2a1010 !important; color: #ef5350 !important; }
-.cbadge.mt-FLASH { background: #2a0a20 !important; color: #ff40c0 !important; }
-.cbadge.mt-PERIPH { background: #1a3a1a !important; color: #66bb6a !important; }
+.cbadge.mt-RAM      { background: #2a2700 !important; color: #ffd600 !important; }
+.cbadge.mt-ROM      { background: #2a1010 !important; color: #ef5350 !important; }
+.cbadge.mt-FLASH    { background: #2a0a20 !important; color: #ff40c0 !important; }
+.cbadge.mt-MMIO     { background: #0d1f0d !important; color: #2e7d32 !important; }  /* dark green — MAL segment */
+.cbadge.mt-INTERNAL { background: #1a1e3a !important; color: #6b8aff !important; }
 .cbadge.mt-RESERVED { background: #2a2a2a !important; color: #9e9e9e !important; }
-.cbadge.mt-RESERVED { background: #2a2a2a !important; color: #9e9e9e !important; }
+.cbadge.ral-mmio-reg { background: #1a2e1a !important; color: #a5d6a7 !important; }  /* light green — RAL register */
 .cbody { padding: 8px 12px; display: flex; flex-direction: column; gap: 3px; cursor: move; }
 .crow { display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 1px 0; }
 .ckey { color: var(--text3); font-family: var(--font-code); }
@@ -482,6 +490,17 @@ body {
 .btn-ghost:hover { border-color: var(--text2); color: var(--text); }
 .btn-blue { background: var(--blue-soft); color: #fff; border-color: var(--blue-soft); }
 .btn-blue:hover { background: var(--blue); border-color: var(--blue); }
+
+/* ── BITFIELD VISUALIZATION ── */
+.bf-bar-wrap { margin-top:5px; width:100%; }
+.bf-bar-header { display:flex; justify-content:space-between; margin-bottom:1px; }
+.bf-bar-header-cell { display:flex; flex-direction:column; align-items:center; line-height:1.2; }
+.bf-bar-header-cell span { font-family:var(--font-code); font-size:7px; color:var(--text3); opacity:0.75; letter-spacing:0.3px; }
+.bf-bar { display:flex; flex-direction:row; gap:1px; border-radius:3px; overflow:hidden; height:14px; width:100%; }
+.bf-seg { height:14px; display:flex; align-items:center; justify-content:center; font-family:var(--font-code); font-size:8px; font-weight:700; color:rgba(255,255,255,0.9); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; border-radius:2px; min-width:4px; flex-shrink:0; }
+.bf-reserved { background:#2a2e44 !important; }
+.bf-bar-sizes { display:flex; margin-top:1px; width:100%; }
+.bf-size-cell { font-family:var(--font-code); font-size:7px; color:var(--text3); opacity:0.6; text-align:center; overflow:hidden; white-space:nowrap; flex-shrink:0; }
 
 /* ── EXPORT MODAL ── */
 .exp-tabs { display:flex; gap:2px; padding:10px 16px 0; background:var(--bg3); border-bottom:1px solid var(--border); }
@@ -548,7 +567,7 @@ body {
           </span>
         </div>
         <div class="tree-items open" id="mal-items">
-          <div class="tree-add" onclick="openAdd('mal')">＋ Add Segment</div>
+          <div class="tree-add" onclick="openAdd('mal')">＋ Add segment...</div>
         </div>
       </div>
       <div class="tree-sec">
@@ -557,7 +576,7 @@ body {
           <span class="badge" id="ral-badge">0</span>
         </div>
         <div class="tree-items open" id="ral-items">
-          <div class="tree-add ral" onclick="openAdd('ral')">＋ Add register</div>
+          <div class="tree-add ral" onclick="openAdd('ral')">＋ Add register...</div>
         </div>
       </div>
     </div>
@@ -587,13 +606,13 @@ body {
         <div id="rubber-band"></div>
         <div id="czoom">
           <div id="cinner">
-            <div class="empty-state" id="empty">
-              <div class="eicon">⬡</div>
-              <p>Canvas is empty</p>
-              <p class="esub">Add MAL layers or RAL registers from the panel</p>
-            </div>
           </div>
         </div>
+      </div>
+      <div class="empty-state" id="empty">
+        <div class="eicon">⬡</div>
+        <p>Canvas is empty</p>
+        <p class="esub">Add MAL layers or RAL registers from the panel</p>
       </div>
 
     </div>
@@ -643,7 +662,7 @@ body {
           <option value="RAM">RAM</option>
           <option value="ROM">ROM</option>
           <option value="FLASH">FLASH</option>
-          <option value="PERIPH">PERIPH</option>
+          <option value="MMIO">MMIO (Memory-Mapped IO)</option>
           <option value="RESERVED">RESERVED</option>
         </select>
       </div>
@@ -675,24 +694,70 @@ body {
 
 <!-- MODAL: Add RAL Register -->
 <div class="overlay" id="modal-ral">
-  <div class="modal">
+  <div class="modal" style="min-width:420px;max-width:500px">
     <div class="mhdr">
       <span>Add RAL Register</span>
       <button class="mx" onclick="closeModal('modal-ral')">×</button>
     </div>
-    <div class="mbody">
+    <div class="mbody" style="max-height:70vh;overflow-y:auto">
       <div class="prop-grp">
-        <label class="prop-lbl">Name</label>
+        <label class="prop-lbl">Name <span style="color:var(--red)">*</span></label>
         <input class="prop-in" id="ral-name" placeholder="e.g. CTRL_REG" oninput="clearFieldError('ral-name-err')" />
         <span class="field-err" id="ral-name-err"></span>
       </div>
       <div class="prop-grp">
-        <label class="prop-lbl">Type</label>
-        <select class="prop-sel" id="ral-type"></select>
+        <label class="prop-lbl">Register Type</label>
+        <select class="prop-sel" id="ral-regtype" onchange="ralModalUpdateFields()">
+          <option value="MMIO">MMIO</option>
+          <option value="INTERNAL">INTERNAL</option>
+        </select>
+      </div>
+      <div class="prop-grp" id="ral-core-grp">
+        <label class="prop-lbl">Core (1–10)</label>
+        <input class="prop-in" id="ral-core" type="number" min="1" max="10" value="1" disabled placeholder="1–10" />
+      </div>
+      <div class="prop-grp">
+        <label class="prop-lbl">Size (bits)</label>
+        <select class="prop-sel" id="ral-size" onchange="ralModalUpdateFields()">
+          <option value="8">8 bit</option>
+          <option value="16">16 bit</option>
+          <option value="32" selected>32 bit</option>
+          <option value="64">64 bit</option>
+        </select>
+      </div>
+      <div class="prop-grp" id="ral-addr-grp">
+        <label class="prop-lbl">Base Address (hex)</label>
+        <input class="prop-in" id="ral-addr" placeholder="e.g. 0x40020000" />
+      </div>
+      <div class="prop-grp" id="ral-access-grp">
+        <label class="prop-lbl">Access Widths</label>
+        <div id="ral-access-checkboxes" style="display:flex;flex-direction:column;gap:4px;padding:4px 0;"></div>
       </div>
       <div class="prop-grp">
         <label class="prop-lbl">Description</label>
         <input class="prop-in" id="ral-desc" placeholder="Brief description..." />
+      </div>
+
+      <!-- Bitfields section -->
+      <div class="prop-grp" style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span class="prop-lbl" style="margin:0">Bit Fields</span>
+          <button onclick="modalAddBitfield()" type="button" style="background:var(--blue-soft);color:#fff;border:none;border-radius:3px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer">+ Add field</button>
+        </div>
+        <div id="ral-bf-list" style="display:flex;flex-direction:column;gap:3px;min-height:0"></div>
+        <div id="ral-bf-empty" style="font-size:10px;color:var(--text3);text-align:center;padding:6px 0">No bitfields — click "+ Add field" to add one</div>
+      </div>
+
+      <div class="prop-grp" style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
+        <label class="prop-lbl" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="ral-enum-chk" onchange="ralModalUpdateFields()" style="width:14px;height:14px;accent-color:var(--blue);cursor:pointer"/>
+          Enumerable (create N instances)
+        </label>
+      </div>
+      <div class="prop-grp" id="ral-enum-grp" style="display:none">
+        <label class="prop-lbl">Count N (≥ 2)</label>
+        <input class="prop-in" id="ral-enum-n" type="number" min="2" value="2" placeholder="e.g. 4" />
+        <span style="font-size:10px;color:var(--text3);margin-top:2px">Registers will be created at base address + n × (size/8) bytes each</span>
       </div>
     </div>
     <div class="mfoot">
@@ -721,7 +786,7 @@ body {
           <option value="RAM">RAM</option>
           <option value="ROM">ROM</option>
           <option value="FLASH">FLASH</option>
-          <option value="PERIPH">PERIPH</option>
+          <option value="MMIO">MMIO (Memory-Mapped IO)</option>
           <option value="RESERVED">RESERVED</option>
         </select>
       </div>
@@ -877,6 +942,7 @@ function updateMinimap() {
       ? (n.memType === 'RAM'    ? '#ffd600'
        : n.memType === 'ROM'    ? '#ef5350'
        : n.memType === 'FLASH'  ? '#ef5350'
+       : n.memType === 'MMIO'   ? '#66bb6a'
        : '#66bb6a')
       : '#6b8aff';
     ctx.fillStyle = (S.selected === n.id || S.multiSel.has(n.id)) ? '#ffffff40' : color + '30';
@@ -921,17 +987,18 @@ function renderTree() {
   const re = document.getElementById('ral-items');
 
   // ── RAL: flat list ──
-  re.innerHTML = '<div class="tree-add ral" onclick="openAdd(\'ral\')">＋ Add register</div>';
+  re.innerHTML = '<div class="tree-add ral" onclick="openAdd(\'ral\')">＋ Add register...</div>';
   S.nodes.filter(n => n.layer === 'ral').forEach(n => {
     const d = document.createElement('div');
     d.className = 'tree-item' + (S.selected === n.id ? ' sel' : '');
-    d.innerHTML = `<span class="ti-icon">◆</span><span style="flex:1">${n.name}</span><span class="ti-del" onclick="event.stopPropagation();askConfirmDelete(${n.id})">🗑</span>`;
+    const label = n.regType === 'INTERNAL' && n.coreVal ? `${n.name} (${n.coreVal})` : n.name;
+    d.innerHTML = `<span class="ti-icon">◆</span><span style="flex:1">${label}</span><span class="ti-del" onclick="event.stopPropagation();askConfirmDelete(${n.id})">🗑</span>`;
     d.onclick = () => select(n.id);
     re.insertBefore(d, re.lastChild);
   });
 
   // ── MAL: grouped by memory type, order follows S.nodes (= address order after sort) ──
-  me.innerHTML = '<div class="tree-add" onclick="openAdd(\'mal\')">+ Add Segment</div>';
+  me.innerHTML = '<div class="tree-add" onclick="openAdd(\'mal\')">＋ Add segment...</div>';
   const malNodes = S.nodes.filter(n => n.layer === 'mal');
 
   // Groups appear in the order their first member appears in S.nodes
@@ -949,7 +1016,8 @@ function renderTree() {
 
     const grpHdr = document.createElement('div');
     grpHdr.className = 'tree-memgrp mg-' + mt + (wasOpen ? ' open' : '');
-    grpHdr.innerHTML = `<span class="mg-chevron">▶</span><span>${mt}</span><span style="margin-left:auto;font-size:10px;opacity:0.6">${group.length}</span>`;
+    const mtLabel = mt === 'MMIO' ? 'MMIO (Memory-Mapped IO)' : mt;
+    grpHdr.innerHTML = `<span class="mg-chevron">▶</span><span>${mtLabel}</span><span style="margin-left:auto;font-size:10px;opacity:0.6">${group.length}</span>`;
     grpHdr.onclick = () => {
       grpHdr.classList.toggle('open');
       document.getElementById(grpId).classList.toggle('open');
@@ -974,54 +1042,71 @@ function renderTree() {
 
 function sortMal(dir, btn) {
   const malNodes = S.nodes.filter(n => n.layer === 'mal');
-  if (malNodes.length < 2) { status('Nothing to sort — add more segments first'); return; }
-
-  // Sort by start address ascending
-  malNodes.sort((a, b) => parseHex(a.segAddr) - parseHex(b.segAddr));
   const ralNodes = S.nodes.filter(n => n.layer === 'ral');
-  S.nodes = [...malNodes, ...ralNodes];
+  const allNodes = [...malNodes, ...ralNodes];
+  if (allNodes.length < 1) { status('Nothing to sort — add segments or registers first'); return; }
 
-  const cardDims = malNodes.map(n => {
-    const card = document.querySelector(`[data-id="${n.id}"]`);
-    return { n, w: card ? Math.ceil(card.offsetWidth  / GRID) * GRID : 224,
-                 h: card ? Math.ceil(card.offsetHeight / GRID) * GRID : 96 };
-  });
-
-  // Use the position of the card with the smallest address as the starting anchor
-  const anchor = cardDims[0].n; // already sorted by address ascending
-  const GAP = GRID / 2; // half snap grid — used when segments are NOT memory-adjacent
-
-  // Check if two consecutive nodes are adjacent in address space
-  function memAdjacent(a, b) {
-    return parseHex(a.segAddr) + Number(a.segSize) === parseHex(b.segAddr);
+  // ── Helper: get the numeric address of any node ──
+  function nodeAddr(n) {
+    if (n.layer === 'mal') return isNaN(parseHex(n.segAddr)) ? Infinity : parseHex(n.segAddr);
+    return n.regAddr ? parseHex(n.regAddr) : Infinity;
   }
 
+  // ── Helper: get the byte size of any node ──
+  function nodeSize(n) {
+    if (n.layer === 'mal') return Number(n.segSize) || 0;
+    return (n.regSize || 32) / 8;
+  }
+
+  // ── Sort all nodes together by address ascending; nodes with no address go last ──
+  allNodes.sort((a, b) => nodeAddr(a) - nodeAddr(b));
+  S.nodes = allNodes;
+
+  // ── Get card pixel dimensions, snapped to grid ──
+  const dims = allNodes.map(n => {
+    const card = document.querySelector(`[data-id="${n.id}"]`);
+    const w = card ? Math.ceil(card.offsetWidth  / GRID) * GRID : 7 * GRID; // 224px = 7*32
+    const h = card ? Math.ceil(card.offsetHeight / GRID) * GRID : 3 * GRID; // 96px  = 3*32
+    return { n, w, h };
+  });
+
+  // ── Adjacent: two consecutive nodes are memory-contiguous ──
+  function areAdjacent(a, b) {
+    const endA = nodeAddr(a) + nodeSize(a);
+    const addrB = nodeAddr(b);
+    return nodeAddr(a) !== Infinity && nodeSize(a) > 0 && endA === addrB;
+  }
+
+  // ── GAP between non-adjacent items: one grid cell ──
+  const GAP = GRID;
+
+  // ── Starting anchor: position of the node with the smallest address ──
+  const anchorNode = allNodes[0]; // already sorted, first = smallest address
+  const START_X = Math.round(anchorNode.x / GRID) * GRID;
+  const START_Y = Math.round(anchorNode.y / GRID) * GRID;
+
   if (dir === 'v') {
-    const baseX = anchor.x;
-    let curY = anchor.y;
-    cardDims.forEach(({ n, h }, i) => {
-      n.x = baseX;
+    // ── Vertical stack: one column, sorted top-to-bottom ──
+    let curY = START_Y;
+    dims.forEach(({ n, h }, i) => {
+      n.x = START_X;
       n.y = curY;
-      const next = cardDims[i + 1];
-      if (next) {
-        const gap = memAdjacent(n, next.n) ? 0 : GAP;
-        curY += h + gap;
-      }
+      const next = dims[i + 1];
+      const gap = next && areAdjacent(n, next.n) ? 0 : GAP;
+      curY += h + (next ? gap : 0);
     });
-    status('MAL sorted by address — vertical stack ↕');
+    status('Sorted by address — vertical ↕  (' + allNodes.length + ' nodes)');
   } else {
-    const baseY = anchor.y;
-    let curX = anchor.x;
-    cardDims.forEach(({ n, w }, i) => {
+    // ── Horizontal row: one row, sorted left-to-right ──
+    let curX = START_X;
+    dims.forEach(({ n, w }, i) => {
       n.x = curX;
-      n.y = baseY;
-      const next = cardDims[i + 1];
-      if (next) {
-        const gap = memAdjacent(n, next.n) ? 0 : GAP;
-        curX += w + gap;
-      }
+      n.y = START_Y;
+      const next = dims[i + 1];
+      const gap = next && areAdjacent(n, next.n) ? 0 : GAP;
+      curX += w + (next ? gap : 0);
     });
-    status('MAL sorted by address — horizontal row ↔');
+    status('Sorted by address — horizontal ↔  (' + allNodes.length + ' nodes)');
   }
 
   btn.classList.add('sorted');
@@ -1044,7 +1129,15 @@ function openAdd(layer) {
   } else {
     document.getElementById('ral-name').value = '';
     document.getElementById('ral-desc').value = '';
-    document.getElementById('ral-type').innerHTML = RAL_TYPES.map(t=>`<option value="${t}">${t}</option>`).join('');
+    document.getElementById('ral-regtype').value = 'MMIO';
+    document.getElementById('ral-core').value = '1';
+    document.getElementById('ral-size').value = '32';
+    document.getElementById('ral-addr').value = '';
+    document.getElementById('ral-enum-chk').checked = false;
+    document.getElementById('ral-enum-n').value = '2';
+    _modalBitfields = [];
+    renderModalBitfields();
+    ralModalUpdateFields();
     document.getElementById('modal-ral').classList.add('open');
     setTimeout(()=>document.getElementById('ral-name').focus(), 80);
   }
@@ -1052,8 +1145,10 @@ function openAdd(layer) {
 
 function closeModal(id) {
   if (id) { document.getElementById(id).classList.remove('open'); return; }
-  document.getElementById('modal-mal').classList.remove('open');
-  document.getElementById('modal-ral').classList.remove('open');
+  ['modal-mal','modal-ral','modal-save','modal-edit-mal','modal-edit-ral'].forEach(mid => {
+    const el = document.getElementById(mid);
+    if (el) el.classList.remove('open');
+  });
 }
 
 /* ── helpers ── */
@@ -1285,6 +1380,124 @@ function confirmEditRal() {
   status(`Register "${n.name}" updated`);
 }
 
+function ralModalUpdateFields() {
+  const regtype = document.getElementById('ral-regtype').value;
+  const size    = parseInt(document.getElementById('ral-size').value) || 32;
+  const isInternal = regtype === 'INTERNAL';
+  const enumEnabled = document.getElementById('ral-enum-chk').checked;
+
+  // CORE field: disabled for MMIO, enabled for INTERNAL
+  const coreIn = document.getElementById('ral-core');
+  coreIn.disabled = !isInternal;
+  coreIn.style.opacity = isInternal ? '1' : '0.4';
+
+  // Address and access: only for MMIO
+  document.getElementById('ral-addr-grp').style.display = isInternal ? 'none' : '';
+  document.getElementById('ral-access-grp').style.display = isInternal ? 'none' : '';
+
+  // Access widths checkboxes based on size
+  const accDiv = document.getElementById('ral-access-checkboxes');
+  const prevSelected = new Set([...accDiv.querySelectorAll('input:checked')].map(x=>x.value));
+  accDiv.innerHTML = '';
+  const widths = [];
+  if (size >= 8)  widths.push(8);
+  if (size >= 16) widths.push(16);
+  if (size >= 32) widths.push(32);
+  if (size >= 64) widths.push(64);
+  widths.forEach(w => {
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);cursor:pointer';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox'; chk.value = w;
+    chk.style.cssText = 'width:13px;height:13px;accent-color:var(--blue);cursor:pointer';
+    // Default: check the native size; if prev selection exists, restore it
+    chk.checked = prevSelected.size ? prevSelected.has(String(w)) : (w === size);
+    lbl.appendChild(chk);
+    lbl.appendChild(document.createTextNode(`${w}-bit access`));
+    accDiv.appendChild(lbl);
+  });
+
+  // Enumerable section
+  document.getElementById('ral-enum-grp').style.display = enumEnabled ? '' : 'none';
+}
+
+// ── Temporary bitfield storage while the "Add Register" modal is open ──
+let _modalBitfields = [];
+
+function renderModalBitfields() {
+  const list  = document.getElementById('ral-bf-list');
+  const empty = document.getElementById('ral-bf-empty');
+  if (!list) return;
+  const BF_COLORS = ['#6b8aff','#4fc3f7','#66bb6a','#ffb74d','#ef5350','#ab47bc','#26c6da','#d4e157','#ff7043','#5c6bc0'];
+  const bfColor = (f,i) => f.access === 'RESERVED' ? '#757575' : BF_COLORS[i % BF_COLORS.length];
+  list.innerHTML = '';
+  _modalBitfields.forEach((f, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:4px;align-items:center;padding:4px 6px;background:var(--bg3);border-radius:3px;border-left:3px solid ' + bfColor(f,i);
+    row.innerHTML = `
+      <div style="flex:1;min-width:0">
+        <span style="font-size:11px;font-weight:600;color:${bfColor(f,i)};font-family:var(--font-code)">${f.name}</span>
+        <span style="font-size:10px;color:var(--text3);margin-left:6px">[${f.bitEnd}:${f.bitStart}] ${f.access}</span>
+      </div>
+      <button onclick="_modalBitfields.splice(${i},1);renderModalBitfields()" type="button"
+        style="background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 3px;line-height:1">×</button>`;
+    list.appendChild(row);
+  });
+  if (empty) empty.style.display = _modalBitfields.length ? 'none' : '';
+}
+
+function modalAddBitfield() {
+  const regSize = parseInt(document.getElementById('ral-size').value) || 32;
+  // Find first free bit range
+  const usedBits = new Set();
+  _modalBitfields.forEach(f => { for (let b = f.bitStart; b <= f.bitEnd; b++) usedBits.add(b); });
+  let nextStart = 0;
+  while (usedBits.has(nextStart) && nextStart < regSize) nextStart++;
+
+  const prevCb = _confirmCallback;
+  _confirmCallback = () => {
+    const bfName   = document.getElementById('bf-name').value.trim();
+    const bfStart  = parseInt(document.getElementById('bf-start').value);
+    const bfEnd    = parseInt(document.getElementById('bf-end').value);
+    const bfAccess = document.getElementById('bf-access').value;
+    const errEl    = document.getElementById('bf-err');
+    if (!bfName) { errEl.textContent = 'Name is required'; _confirmCallback = null; modalAddBitfield(); return; }
+    if (isNaN(bfStart)||isNaN(bfEnd)||bfStart<0||bfEnd>=regSize||bfStart>bfEnd) {
+      errEl.textContent = `Bit range must be 0–${regSize-1} with start ≤ end`; _confirmCallback = null; modalAddBitfield(); return;
+    }
+    const overlap = _modalBitfields.some(f => !(bfEnd < f.bitStart || bfStart > f.bitEnd));
+    if (overlap) { errEl.textContent = 'Bit range overlaps existing field'; _confirmCallback = null; modalAddBitfield(); return; }
+    _modalBitfields.push({ name: bfName, bitStart: bfStart, bitEnd: bfEnd, access: bfAccess });
+    _modalBitfields.sort((a, b) => b.bitStart - a.bitStart);
+    renderModalBitfields();
+    status(`Bitfield "${bfName}" ready`);
+  };
+  document.getElementById('confirm-msg').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="prop-grp"><label class="prop-lbl">Field Name</label><input class="prop-in" id="bf-name" placeholder="e.g. EN, MODE"/></div>
+      <div style="display:flex;gap:8px">
+        <div class="prop-grp" style="flex:1"><label class="prop-lbl">Bit Start</label><input class="prop-in" id="bf-start" type="number" min="0" max="${regSize-1}" value="${nextStart}"/></div>
+        <div class="prop-grp" style="flex:1"><label class="prop-lbl">Bit End</label><input class="prop-in" id="bf-end" type="number" min="0" max="${regSize-1}" value="${Math.min(nextStart, regSize-1)}"/></div>
+      </div>
+      <div class="prop-grp"><label class="prop-lbl">Access</label>
+        <select class="prop-sel" id="bf-access">
+          <option value="RW">RW (Read/Write)</option>
+          <option value="RO">RO (Read Only)</option>
+          <option value="WO">WO (Write Only)</option>
+          <option value="RESERVED">RESERVED (grey)</option>
+        </select>
+      </div>
+      <span class="field-err" id="bf-err"></span>
+    </div>`;
+  const okBtn = document.getElementById('confirm-ok-btn');
+  okBtn.textContent = 'Add Field'; okBtn.style.background = 'var(--blue-soft)';
+  document.querySelector('#modal-confirm .mhdr span').textContent = '+ Add Bit Field';
+  document.querySelector('#modal-confirm .mhdr').style.color = 'var(--blue)';
+  document.getElementById('modal-confirm').classList.add('open');
+  setTimeout(() => document.getElementById('bf-name').focus(), 80);
+}
+
+
 function confirmAddRal() {
   clearFieldError('ral-name-err');
   const name = document.getElementById('ral-name').value.trim();
@@ -1297,12 +1510,49 @@ function confirmAddRal() {
     document.getElementById('ral-name').focus();
     return;
   }
-  const n = { id:S.nextId++, layer:'ral', name, type:document.getElementById('ral-type').value,
-    desc:document.getElementById('ral-desc').value.trim(),
-    x:48+Math.random()*320, y:48+Math.random()*200 };
-  S.nodes.push(n);
-  closeModal('modal-ral'); renderTree(); renderCanvas(); select(n.id); updateStats();
-  status(`"${name}" added to RAL`);
+
+  const regType = document.getElementById('ral-regtype').value;
+  const regSize = parseInt(document.getElementById('ral-size').value) || 32;
+  const coreVal = regType === 'INTERNAL' ? (parseInt(document.getElementById('ral-core').value) || 1) : null;
+  const regAddr = regType === 'MMIO' ? document.getElementById('ral-addr').value.trim() : null;
+
+  // Gather access widths
+  const accChecks = document.getElementById('ral-access-checkboxes').querySelectorAll('input:checked');
+  const accessWidths = regType === 'MMIO' ? [...accChecks].map(c => parseInt(c.value)) : [];
+
+  const desc = document.getElementById('ral-desc').value.trim();
+
+  // Enumerable
+  const enumEnabled = document.getElementById('ral-enum-chk').checked;
+  const enumN = enumEnabled ? (parseInt(document.getElementById('ral-enum-n').value) || 2) : 1;
+  const stepBytes = regSize / 8;
+
+  const baseAddr = regAddr && regAddr !== '' ? regAddr : '0x00000000';
+  const baseAddrNum = parseHex(baseAddr);
+
+  const addedIds = [];
+  for (let idx = 0; idx < enumN; idx++) {
+    const instName = enumEnabled ? `${name}_${idx}` : name;
+    if (enumEnabled && isIdDuplicate(instName, null)) continue; // skip duplicates silently
+    const instAddr = (regType === 'MMIO' && regAddr)
+      ? toHex(baseAddrNum + idx * stepBytes)
+      : null;
+    const n = {
+      id: S.nextId++, layer: 'ral', name: instName, type: 'register',
+      regType, regSize, coreVal, regAddr: instAddr, accessWidths,
+      desc, bitfields: _modalBitfields.map(f => ({...f})),
+      x: 48 + Math.random() * 320, y: 48 + idx * 80 + Math.random() * 40
+    };
+    S.nodes.push(n);
+    addedIds.push(n.id);
+  }
+
+  closeModal('modal-ral');
+  _modalBitfields = [];
+  renderTree(); renderCanvas();
+  if (addedIds.length === 1) select(addedIds[0]);
+  updateStats();
+  status(`"${name}"${enumEnabled ? ` ×${enumN}` : ''} added to RAL`);
 }
 
 function toHex(n) {
@@ -1363,12 +1613,19 @@ function renderCanvas() {
       if (card.offsetHeight !== snapped) card.style.minHeight = snapped + 'px';
     });
     const isMal = n.layer==='mal';
-    const mtClass = (isMal && n.memType) ? ' mt-' + n.memType : '';
+    const mtClass = isMal
+      ? (n.memType ? ' mt-' + n.memType : '')
+      : (n.regType === 'INTERNAL' ? ' mt-INTERNAL' : ' ral-mmio-reg');
     card.className = 'ub-card' + mtClass + (S.selected===n.id ? (isMal?' sel-mal':' sel-ral') : '') + (S.multiSel.has(n.id) ? ' sel-multi' : '');
     card.querySelector('.ctitle').textContent = n.name;
     const badge = card.querySelector('.cbadge');
-    badge.textContent = isMal ? (n.memType || 'segment') : n.type;
-    badge.className = 'cbadge' + (isMal && n.memType ? ' mt-' + n.memType : '');
+    if (n.layer === 'ral') {
+      badge.textContent = n.regType === 'INTERNAL' ? 'INTERNAL' : 'MMIO';
+      badge.className = 'cbadge ' + (n.regType === 'INTERNAL' ? 'mt-INTERNAL' : 'ral-mmio-reg');
+    } else {
+      badge.textContent = isMal ? (n.memType || 'segment') : (n.regType || n.type);
+      badge.className = 'cbadge' + (isMal && n.memType ? ' mt-' + n.memType : '');
+    }
     // Build card body safely — use setAttribute for desc to avoid HTML injection
     (function buildBody(cbody) {
       cbody.innerHTML = '';
@@ -1399,19 +1656,102 @@ function renderCanvas() {
           sub.innerHTML = `<span class="ckey" style="opacity:0"></span><span class="cval" style="opacity:0.55;font-size:10px">${segSizeStr(n)}</span>`;
           cbody.appendChild(sub);
         }
-
         descRow(n.desc);
       } else {
-        row('type', n.type);
+        // RAL register
+        const regType = n.regType || 'MMIO';
+        const regSize = n.regSize || 32;
+        const coreLabel = regType === 'INTERNAL' && n.coreVal ? `${n.name} (${n.coreVal})` : n.name;
+        if (regType === 'INTERNAL' && n.coreVal) {
+          row('core', n.coreVal);
+        }
+        row('size', regSize + ' bit');
+        if (regType === 'MMIO' && n.regAddr) {
+          row('addr', n.regAddr);
+          if (n.accessWidths && n.accessWidths.length) {
+            row('access', n.accessWidths.map(w=>w+'b').join(', '));
+          }
+        }
         descRow(n.desc);
+        // ── Bitfield bar ──
+        if (n.bitfields && n.bitfields.length) {
+          const BF_COLORS = ['#6b8aff','#4fc3f7','#66bb6a','#ffb74d','#ef5350','#ab47bc','#26c6da','#d4e157','#ff7043','#5c6bc0'];
+          const bfColor = (bf, idx) => bf.access === 'RESERVED' ? '#757575' : BF_COLORS[idx % BF_COLORS.length];
+          const bits = regSize;
+
+          // Build bit map
+          const bitMap = new Array(bits).fill(null);
+          n.bitfields.forEach((bf, idx) => {
+            for (let b = bf.bitStart; b <= bf.bitEnd && b < bits; b++) bitMap[b] = idx;
+          });
+
+          // Collect segments MSB→LSB: [{fIdx, segBits, pct}]
+          const segs = [];
+          let i = bits - 1;
+          while (i >= 0) {
+            const fIdx = bitMap[i];
+            let j = i;
+            while (j >= 0 && bitMap[j] === fIdx) j--;
+            const segBits = i - j;
+            segs.push({ fIdx, segBits, pct: (segBits / bits * 100).toFixed(2), bitHigh: i, bitLow: j + 1 });
+            i = j;
+          }
+
+          // Wrapper
+          const wrap = document.createElement('div');
+          wrap.className = 'bf-bar-wrap';
+
+          // Two-row header: MSB/LSB top, [N]/[0] below
+          const hdr = document.createElement('div');
+          hdr.className = 'bf-bar-header';
+          hdr.innerHTML = `
+            <div class="bf-bar-header-cell"><span>MSB</span><span>[${bits-1}]</span></div>
+            <div class="bf-bar-header-cell"><span>LSB</span><span>[0]</span></div>`;
+          wrap.appendChild(hdr);
+
+          // Bar
+          const bar = document.createElement('div');
+          bar.className = 'bf-bar';
+          segs.forEach(({ fIdx, segBits, pct, bitHigh, bitLow }) => {
+            const seg = document.createElement('div');
+            seg.className = 'bf-seg' + (fIdx === null ? ' bf-reserved' : '');
+            seg.style.width = pct + '%';
+            if (fIdx !== null) {
+              const bf = n.bitfields[fIdx];
+              seg.style.background = bfColor(bf, fIdx);
+              seg.title = `${bf.name} [${bitHigh}:${bitLow}] ${bf.access} — ${segBits}b`;
+              // Show name (truncated) if wide enough
+              if (segBits >= 3) seg.textContent = bf.name.length > 4 ? bf.name.slice(0,4) : bf.name;
+            } else {
+              seg.title = `reserved [${bitHigh}:${bitLow}] — ${segBits}b`;
+            }
+            bar.appendChild(seg);
+          });
+          wrap.appendChild(bar);
+
+          // Bit-count row: one cell per segment, same widths as bar
+          const sizeRow = document.createElement('div');
+          sizeRow.className = 'bf-bar-sizes';
+          segs.forEach(({ fIdx, segBits, pct }) => {
+            const cell = document.createElement('div');
+            cell.className = 'bf-size-cell';
+            cell.style.width = pct + '%';
+            // Only show count if segment is wide enough to not look cramped
+            cell.textContent = segBits >= 2 ? segBits + 'b' : '';
+            sizeRow.appendChild(cell);
+          });
+          wrap.appendChild(sizeRow);
+
+          cbody.appendChild(wrap);
+        }
       }
     })(card.querySelector('.cbody'));
   });
 
   // In MAL view: draw memory-type group labels as background banners
   if (S.view === 'mal') {
-    const MEM_TYPES = ['RAM','ROM','FLASH','PERIPH','RESERVED'];
-    const MT_COLORS = { RAM:'#ffd600', ROM:'#ef5350', FLASH:'#ff40c0', PERIPH:'#66bb6a', RESERVED:'#757575' };
+    const MEM_TYPES = ['RAM','ROM','FLASH','MMIO','RESERVED'];
+    const MT_COLORS = { RAM:'#ffd600', ROM:'#ef5350', FLASH:'#ff40c0', MMIO:'#66bb6a', RESERVED:'#757575' };
     MEM_TYPES.forEach(mt => {
       const group = visibleNodes.filter(n => (n.memType||'RAM') === mt);
       if (group.length === 0) return;
@@ -1444,7 +1784,7 @@ function makeCard(n) {
   card.dataset.id = n.id;
   const isMal = n.layer==='mal';
   const hdr = document.createElement('div');
-  hdr.className = `ch ${n.layer}${n.memType ? ' mt-' + n.memType : ''}`;
+  hdr.className = `ch ${n.layer}${n.memType ? ' mt-' + n.memType : ''}${n.layer === 'ral' ? (n.regType === 'INTERNAL' ? ' mt-INTERNAL' : ' ral-mmio-reg') : ''}`;
   hdr.innerHTML = `<span class="ctitle"></span><span class="cbadge"></span><button class="card-del-btn" title="Delete">🗑</button>`;
 
   // Delete button — stop propagation so it doesn't trigger drag/select
@@ -1657,6 +1997,11 @@ function askConfirmDeleteMulti(ids) {
 
 function confirmDeleteOk() {
   closeModal('modal-confirm');
+  // Reset modal title/style
+  const hdr = document.querySelector('#modal-confirm .mhdr span');
+  if (hdr) hdr.textContent = '⚠ Confirm Delete';
+  const mhdr = document.querySelector('#modal-confirm .mhdr');
+  if (mhdr) mhdr.style.color = '';
   if (_confirmCallback !== null) {
     const cb = _confirmCallback; _confirmCallback = null;
     // Reset button style
@@ -1706,9 +2051,11 @@ function renderProps() {
   const body = document.getElementById('prop-body');
   const n = S.nodes.find(n=>n.id===S.selected);
   if (!n) { body.innerHTML=`<div class="prop-empty"><div class="peicon">◫</div><p>Select a node<br>to edit its properties</p></div>`; return; }
-  const malProps = n.layer==='mal' ? `
+
+  if (n.layer === 'mal') {
+    body.innerHTML = `
     <div class="prop-grp"><label class="prop-lbl">Segment ID <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-name" value="${n.name}" onblur="setProp('name',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-name-err')"/><span class="field-err" id="pp-name-err"></span></div>
-    <div class="prop-grp"><label class="prop-lbl">Memory Type</label><select class="prop-sel" onchange="setProp('memType',this.value);renderProps()">${['RAM','ROM','FLASH','PERIPH','RESERVED'].map(t=>`<option value="${t}"${t===n.memType?' selected':''}>${t}</option>`).join('')}</select></div>
+    <div class="prop-grp"><label class="prop-lbl">Memory Type</label><select class="prop-sel" onchange="setProp('memType',this.value);renderProps()">${['RAM','ROM','FLASH','MMIO','RESERVED'].map(t=>`<option value="${t}"${t===n.memType?' selected':''}>${t==='MMIO'?'MMIO (Memory-Mapped IO)':t}</option>`).join('')}</select></div>
     <div class="prop-grp"><label class="prop-lbl">Start Address (hex) <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-addr" value="${n.segAddr||''}" placeholder="0x40020000" onblur="setProp('segAddr',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-addr-err')"/><span class="field-err" id="pp-addr-err"></span></div>
     <div class="prop-grp"><label class="prop-lbl">End Address</label><input class="prop-in" id="pp-end" value="${segEndAddr(n)}" disabled style="opacity:0.6"/></div>
     <div class="prop-grp">
@@ -1717,15 +2064,116 @@ function renderProps() {
       <input class="prop-in" value="${segSizeStr(n)}" disabled style="opacity:0.45;margin-top:3px;font-size:11px;padding:3px 8px;"/>
       <span class="field-err" id="pp-size-err"></span>
     </div>
+    <div class="prop-grp"><label class="prop-lbl">Description</label><input class="prop-in" value="${n.desc||''}" oninput="setProp('desc',this.value)" placeholder="Description..."/></div>
+    <div class="prop-grp"><label class="prop-lbl">Layer</label><input class="prop-in" value="MAL" disabled/></div>`;
+    return;
+  }
 
-    <div class="prop-grp"><label class="prop-lbl">Description</label><input class="prop-in" value="${n.desc}" oninput="setProp('desc',this.value)" placeholder="Description..."/></div>
-  ` : `
+  // ── RAL register ──
+  const regType = n.regType || 'MMIO';
+  const regSize = n.regSize || 32;
+  const isInternal = regType === 'INTERNAL';
+  const bf = n.bitfields || [];
+  const BF_COLORS = ['#6b8aff','#4fc3f7','#66bb6a','#ffb74d','#ef5350','#ab47bc','#26c6da','#d4e157','#ff7043','#5c6bc0'];
+  const bfColor = (f, i) => f.access === 'RESERVED' ? '#757575' : BF_COLORS[i % BF_COLORS.length];
+
+  let bfHtml = '';
+  bf.forEach((f, i) => {
+    bfHtml += `<div style="display:flex;gap:4px;align-items:center;margin-bottom:3px;padding:4px 6px;background:var(--bg3);border-radius:3px;border-left:3px solid ${bfColor(f,i)}">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;font-weight:600;color:${bfColor(f,i)};font-family:var(--font-code)">${f.name}</div>
+        <div style="font-size:10px;color:var(--text3)">[${f.bitEnd}:${f.bitStart}] ${f.access}</div>
+      </div>
+      <button onclick="removeBitfield(${i})" style="background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0 2px;line-height:1" title="Remove">×</button>
+    </div>`;
+  });
+
+  body.innerHTML = `
     <div class="prop-grp"><label class="prop-lbl">Name <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-name" value="${n.name}" onblur="setProp('name',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-name-err')"/><span class="field-err" id="pp-name-err"></span></div>
-    <div class="prop-grp"><label class="prop-lbl">Type</label><select class="prop-sel" onchange="setProp('type',this.value)">${RAL_TYPES.map(t=>`<option value="${t}"${t===n.type?' selected':''}>${t}</option>`).join('')}</select></div>
-    <div class="prop-grp"><label class="prop-lbl">Description</label><input class="prop-in" value="${n.desc}" oninput="setProp('desc',this.value)" placeholder="Description..."/></div>
-  `;
-  body.innerHTML = malProps + `
-    <div class="prop-grp"><label class="prop-lbl">Layer</label><input class="prop-in" value="${n.layer.toUpperCase()}" disabled/></div>`;
+    <div class="prop-grp"><label class="prop-lbl">Register Type</label><input class="prop-in" value="${regType}" disabled/></div>
+    ${isInternal ? `<div class="prop-grp"><label class="prop-lbl">Core</label><input class="prop-in" value="${n.coreVal||1}" disabled/></div>` : ''}
+    <div class="prop-grp"><label class="prop-lbl">Size</label><input class="prop-in" value="${regSize} bit" disabled/></div>
+    ${!isInternal && n.regAddr ? `<div class="prop-grp"><label class="prop-lbl">Address</label><input class="prop-in" value="${n.regAddr}" onblur="setProp('regAddr',this.value)" onkeydown="if(event.key==='Enter')this.blur()"/></div>` : ''}
+    ${!isInternal && n.accessWidths && n.accessWidths.length ? `<div class="prop-grp"><label class="prop-lbl">Access Widths</label><input class="prop-in" value="${n.accessWidths.map(w=>w+'b').join(', ')}" disabled/></div>` : ''}
+    <div class="prop-grp"><label class="prop-lbl">Description</label><input class="prop-in" value="${n.desc||''}" oninput="setProp('desc',this.value)" placeholder="Description..."/></div>
+    <div class="prop-grp"><label class="prop-lbl">Layer</label><input class="prop-in" value="RAL" disabled/></div>
+
+    <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span class="prop-lbl" style="margin:0">Bit Fields (${regSize}-bit)</span>
+        <button onclick="openAddBitfield()" style="background:var(--blue-soft);color:#fff;border:none;border-radius:3px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer">+ Add field</button>
+      </div>
+      ${bf.length === 0 ? `<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px 0">No bitfields defined</div>` : bfHtml}
+    </div>`;
+}
+
+function openAddBitfield() {
+  const n = S.nodes.find(n => n.id === S.selected);
+  if (!n) return;
+  const regSize = n.regSize || 32;
+  // Find next free bit range
+  const usedBits = new Set();
+  (n.bitfields||[]).forEach(f => { for(let b=f.bitStart;b<=f.bitEnd;b++) usedBits.add(b); });
+  let nextStart = 0;
+  while (usedBits.has(nextStart) && nextStart < regSize) nextStart++;
+
+  const html = `
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="prop-grp"><label class="prop-lbl">Field Name</label><input class="prop-in" id="bf-name" placeholder="e.g. EN, MODE"/></div>
+      <div style="display:flex;gap:8px">
+        <div class="prop-grp" style="flex:1"><label class="prop-lbl">Bit Start</label><input class="prop-in" id="bf-start" type="number" min="0" max="${regSize-1}" value="${nextStart}"/></div>
+        <div class="prop-grp" style="flex:1"><label class="prop-lbl">Bit End</label><input class="prop-in" id="bf-end" type="number" min="0" max="${regSize-1}" value="${Math.min(nextStart, regSize-1)}"/></div>
+      </div>
+      <div class="prop-grp"><label class="prop-lbl">Access</label>
+        <select class="prop-sel" id="bf-access">
+          <option value="RW">RW (Read/Write)</option>
+          <option value="RO">RO (Read Only)</option>
+          <option value="WO">WO (Write Only)</option>
+          <option value="RESERVED">RESERVED (grey)</option>
+        </select>
+      </div>
+      <span class="field-err" id="bf-err"></span>
+    </div>`;
+
+  _confirmCallback = () => {
+    const bfName = document.getElementById('bf-name').value.trim();
+    const bfStart = parseInt(document.getElementById('bf-start').value);
+    const bfEnd = parseInt(document.getElementById('bf-end').value);
+    const bfAccess = document.getElementById('bf-access').value;
+    const errEl = document.getElementById('bf-err');
+
+    if (!bfName) { errEl.textContent = 'Name is required'; _confirmCallback = null; openAddBitfield(); return; }
+    if (isNaN(bfStart)||isNaN(bfEnd)||bfStart<0||bfEnd>=regSize||bfStart>bfEnd) {
+      errEl.textContent = `Bit range must be 0–${regSize-1} with start ≤ end`;
+      _confirmCallback = null; openAddBitfield(); return;
+    }
+    // Check overlap
+    const overlap = (n.bitfields||[]).some(f => !(bfEnd < f.bitStart || bfStart > f.bitEnd));
+    if (overlap) { errEl.textContent = 'Bit range overlaps existing field'; _confirmCallback = null; openAddBitfield(); return; }
+    if (!n.bitfields) n.bitfields = [];
+    n.bitfields.push({ name: bfName, bitStart: bfStart, bitEnd: bfEnd, access: bfAccess });
+    n.bitfields.sort((a,b)=>b.bitStart-a.bitStart);
+    renderTree(); renderCanvas(); renderProps(); updateStats();
+    status(`Bitfield "${bfName}" added`);
+  };
+  // Temporarily reuse confirm modal with custom body
+  document.getElementById('confirm-msg').innerHTML = html;
+  const okBtn = document.getElementById('confirm-ok-btn');
+  okBtn.textContent = 'Add Field';
+  okBtn.style.background = 'var(--blue-soft)';
+  // Change modal title
+  document.querySelector('#modal-confirm .mhdr span').textContent = '+ Add Bit Field';
+  document.querySelector('#modal-confirm .mhdr').style.color = 'var(--blue)';
+  document.getElementById('modal-confirm').classList.add('open');
+  setTimeout(() => document.getElementById('bf-name').focus(), 80);
+}
+
+function removeBitfield(idx) {
+  const n = S.nodes.find(n => n.id === S.selected);
+  if (!n || !n.bitfields) return;
+  n.bitfields.splice(idx, 1);
+  renderTree(); renderCanvas(); renderProps();
+  status('Bitfield removed');
 }
 
 function ppSetErr(id, msg) {
@@ -1857,17 +2305,39 @@ function _doNewProject() {
 
 function saveProject() {
   const name = S.project || 'untitled';
-  download(name + '.ubp', JSON.stringify({name, nodes:S.nodes, nextId:S.nextId}, null, 2));
-  status(`Project "${name}" saved`);
+  document.getElementById('save-filename').value = name + '.ubp';
+  document.getElementById('modal-save').classList.add('open');
+  setTimeout(() => document.getElementById('save-filename').select(), 80);
+}
+
+function doSaveProject() {
+  const raw = document.getElementById('save-filename').value.trim();
+  if (!raw) return;
+  const filename = raw.endsWith('.ubp') || raw.endsWith('.json') ? raw : raw + '.ubp';
+  // Extract project name from filename (strip extension)
+  const projName = filename.replace(/\.(ubp|json)$/i, '');
+  S.project = projName;
+  updateStats();
+  download(filename, JSON.stringify({name: projName, nodes:S.nodes, nextId:S.nextId}, null, 2));
+  closeModal('modal-save');
+  status(`Project "${filename}" saved`);
 }
 
 function loadProject() {
-  pickFile('.ubp,.json', text=>{
+  pickFileWithName('.ubp,.json', (text, filename) => {
     try {
       const d=JSON.parse(text);
-      const nodes = (d.nodes||[]).map(n => ({...n, segSize: n.segSize ? Number(n.segSize) : 0}));
-      Object.assign(S,{nodes,project:d.name||'untitled',nextId:d.nextId||1,selected:null});
-      renderTree(); renderCanvas(); renderProps(); updateStats(); status(`Project "${S.project}" loaded`);
+      const nodes = (d.nodes||[]).map(n => ({
+        ...n,
+        segSize: n.segSize ? Number(n.segSize) : 0,
+        memType: n.memType === 'PERIPH' ? 'MMIO' : (n.memType || undefined)
+      }));
+      // Use filename (without extension) as project name if file has no embedded name
+      const fileBase = filename ? filename.replace(/\.(ubp|json)$/i,'') : null;
+      const projName = d.name || fileBase || 'untitled';
+      Object.assign(S,{nodes,project:projName,nextId:d.nextId||1,selected:null});
+      renderTree(); renderCanvas(); renderProps(); updateStats();
+      status(`Project "${filename || projName}" loaded`);
     } catch { status('Invalid project file','err'); }
   });
 }
@@ -1876,7 +2346,7 @@ function importProject() {
   pickFile('.ubp,.json', text => {
     try {
       const d = JSON.parse(text);
-      const incoming = (d.nodes || []).map(n => ({...n, segSize: n.segSize ? Number(n.segSize) : 0}));
+      const incoming = (d.nodes || []).map(n => ({...n, segSize: n.segSize ? Number(n.segSize) : 0, memType: n.memType === 'PERIPH' ? 'MMIO' : (n.memType || undefined)}));
       const incomingMal = incoming.filter(n => n.layer === 'mal');
       const incomingRal = incoming.filter(n => n.layer === 'ral');
       const existingMal = S.nodes.filter(n => n.layer === 'mal');
@@ -2026,7 +2496,7 @@ function generateCode(mode) {
    * ════════════════════════════════════════════════ */
   const ramSegs    = mal.filter(n => n.memType === 'RAM');
   const romSegs    = mal.filter(n => n.memType === 'ROM' || n.memType === 'FLASH');
-  const periphSegs = mal.filter(n => n.memType === 'PERIPH');
+  const mmioSegs = mal.filter(n => n.memType === 'MMIO');
 
   let ld = banner(`${S.project}_mal.ld`);
   ld += `
@@ -2038,7 +2508,7 @@ MEMORY
     const attr = (n.memType === 'RAM')                          ? 'rwx'
                : (n.memType === 'ROM' || n.memType === 'FLASH')   ? 'rx'
                : (n.memType === 'RESERVED')                       ? 'r'
-               : 'rw';    /* PERIPH */
+               : 'rw';    /* MMIO */
     const desc = n.desc ? `  /* ${n.desc} */` : '';
     ld += `    ${pad(n.name, 20)} (${attr}) : ORIGIN = ${n.segAddr}, LENGTH = ${toHex(Number(n.segSize))}${desc}\n`;
   });
@@ -2053,8 +2523,8 @@ MEMORY
     ld += `\n`;
   });
 
-  // Only RAM and FLASH segments get an empty section (ROM and PERIPH have no runtime init)
-  const initSegs = mal.filter(n => n.memType === 'RAM' || n.memType === 'FLASH'); // ROM, PERIPH, RESERVED excluded
+  // Only RAM and FLASH segments get an empty section (ROM and MMIO have no runtime init)
+  const initSegs = mal.filter(n => n.memType === 'RAM' || n.memType === 'FLASH'); // ROM, MMIO, RESERVED excluded
   if (initSegs.length) {
     ld += `SECTIONS\n{\n    /* ── Per-segment empty sections (RAM and FLASH only) ── */\n`;
     initSegs.forEach(n => {
@@ -2093,7 +2563,7 @@ typedef enum {
     MAL_MT_RAM      = 0u,
     MAL_MT_ROM      = 1u,
     MAL_MT_FLASH    = 2u,
-    MAL_MT_PERIPH   = 3u,
+    MAL_MT_MMIO   = 3u,
     MAL_MT_RESERVED = 4u
 } mal_memtype_t;
 
@@ -2102,7 +2572,7 @@ typedef enum {
     MAL_OK              = 0,  /**< Operation successful                  */
     MAL_ERR_NOT_FOUND   = 1,  /**< Address not mapped to any segment     */
     MAL_ERR_READONLY    = 2,  /**< Segment is read-only (ROM or FLASH)   */
-    MAL_ERR_PERIPH      = 3,  /**< Segment is a peripheral — not fillable */
+    MAL_ERR_MMIO      = 3,  /**< Segment is a peripheral — not fillable */
     MAL_ERR_RESERVED    = 4   /**< Segment is reserved — no access allowed */
 } mal_err_t;
 
@@ -2142,7 +2612,7 @@ static const mal_seg_t _segs[] = {
     const mt = n.memType === 'RAM'      ? 'MAL_MT_RAM'
              : n.memType === 'ROM'      ? 'MAL_MT_ROM'
              : n.memType === 'FLASH'    ? 'MAL_MT_FLASH'
-             : n.memType === 'PERIPH'   ? 'MAL_MT_PERIPH'
+             : n.memType === 'MMIO'   ? 'MAL_MT_MMIO'
              : 'MAL_MT_RESERVED';
     const desc = n.desc ? `${n.name} — ${n.desc}` : n.name;
     c += `    /* ${desc} */\n`;
@@ -2170,7 +2640,7 @@ mal_err_t mal_fill(uint32_t addr, uint32_t size, uint8_t fill)
     if (seg->memtype == MAL_MT_ROM      ||
         seg->memtype == MAL_MT_FLASH    ||
         seg->memtype == MAL_MT_RESERVED)        return MAL_ERR_READONLY;
-    if (seg->memtype == MAL_MT_PERIPH)          return MAL_ERR_PERIPH;
+    if (seg->memtype == MAL_MT_MMIO)          return MAL_ERR_MMIO;
 
     /* ── Write: word-aligned fill, no libc dependency ── */
     uint32_t word = (uint32_t)fill * 0x01010101u;
@@ -2231,7 +2701,7 @@ static sim_seg_t _sim_segs[] = {
     const smt = n.memType === 'RAM'      ? 'MAL_MT_RAM'
              : n.memType === 'ROM'      ? 'MAL_MT_ROM'
              : n.memType === 'FLASH'    ? 'MAL_MT_FLASH'
-             : n.memType === 'PERIPH'   ? 'MAL_MT_PERIPH'
+             : n.memType === 'MMIO'   ? 'MAL_MT_MMIO'
              : 'MAL_MT_RESERVED';
     sim += `    { (uint32_t)&__seg_${n.name}_start,\n`;
     sim += `      (uint32_t)&__seg_${n.name}_size,\n`;
@@ -2254,9 +2724,9 @@ mal_err_t mal_fill(uint32_t addr, uint32_t size, uint8_t fill)
                 fprintf(stderr, "[MAL-SIM] mal_fill: READONLY segment at 0x%08X (ROM/FLASH/RESERVED)\\n", addr);
                 return MAL_ERR_READONLY;
             }
-            if (_sim_segs[i].memtype == MAL_MT_PERIPH) {
-                fprintf(stderr, "[MAL-SIM] mal_fill: PERIPH segment at 0x%08X — use RAL\\n", addr);
-                return MAL_ERR_PERIPH;
+            if (_sim_segs[i].memtype == MAL_MT_MMIO) {
+                fprintf(stderr, "[MAL-SIM] mal_fill: MMIO segment at 0x%08X — use RAL\\n", addr);
+                return MAL_ERR_MMIO;
             }
 
             uint32_t off = addr - _sim_segs[i].addr;
@@ -2394,6 +2864,7 @@ function download(filename, content) {
   setTimeout(() => { URL.revokeObjectURL(a.href); document.body.removeChild(a); }, 100);
 }
 function pickFile(accept, cb) { const i=document.createElement('input'); i.type='file'; i.accept=accept; i.onchange=e=>{const r=new FileReader();r.onload=ev=>cb(ev.target.result);r.readAsText(e.target.files[0]);}; i.click(); }
+function pickFileWithName(accept, cb) { const i=document.createElement('input'); i.type='file'; i.accept=accept; i.onchange=e=>{const f=e.target.files[0];const r=new FileReader();r.onload=ev=>cb(ev.target.result,f.name);r.readAsText(f);}; i.click(); }
 
 document.addEventListener('DOMContentLoaded', () => {
   const cscroll = document.getElementById('cscroll');
@@ -2470,7 +2941,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-['modal-mal','modal-ral','modal-export','modal-edit-mal','modal-edit-ral','modal-confirm'].forEach(id => {
+['modal-mal','modal-ral','modal-export','modal-edit-mal','modal-edit-ral','modal-confirm','modal-save'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('click', e => { if(e.target===e.currentTarget) closeModal(id); });
   });
@@ -2515,6 +2986,27 @@ document.addEventListener('DOMContentLoaded', () => {
   makeResizer('resizer-right', 'right', 'right');
 });
 </script>
+
+<!-- MODAL: Save File Dialog -->
+<div class="overlay" id="modal-save">
+  <div class="modal" style="min-width:380px;max-width:460px">
+    <div class="mhdr">
+      <span>💾 Save Project</span>
+      <button class="mx" onclick="closeModal('modal-save')">×</button>
+    </div>
+    <div class="mbody">
+      <div class="prop-grp">
+        <label class="prop-lbl">File Name</label>
+        <input class="prop-in" id="save-filename" placeholder="project_name.ubp" />
+        <span style="font-size:10px;color:var(--text3);margin-top:2px">The file will be saved via browser download to your chosen folder</span>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn btn-ghost" onclick="closeModal('modal-save')">Cancel</button>
+      <button class="btn btn-blue" onclick="doSaveProject()">💾 Save</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL: Confirm Delete -->
 <div class="overlay" id="modal-confirm">
