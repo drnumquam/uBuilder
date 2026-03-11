@@ -355,8 +355,10 @@ body {
 .ub-card {
   position: absolute; background: var(--bg2); border: 2px solid var(--border2);
   border-radius: 6px; width: 224px; box-shadow: var(--shadow);
-  transition: box-shadow 0.15s, border-color 0.15s;
+  transition: box-shadow 0.15s, border-color 0.15s, outline-color 0.1s;
   user-select: none;
+  box-sizing: border-box;
+  /* Height is always content-driven; outline (not border) used for selection so height never changes */
 }
 .ub-card.ral-card {
   width: auto; min-width: 224px;
@@ -376,7 +378,7 @@ body {
 .ub-card.mt-RAM.sel-mal,
 .ub-card.mt-ROM.sel-mal,
 .ub-card.mt-FLASH.sel-mal,
-.ub-card.mt-MMIO.sel-mal { border: 4px solid #ffffff !important; box-shadow: 0 0 0 3px #ffffff50, var(--shadow-lg) !important; }
+.ub-card.mt-MMIO.sel-mal { outline: 3px solid #ffffff; outline-offset: 1px; box-shadow: 0 0 0 5px #ffffff30, var(--shadow-lg) !important; }
 /* Card header tint per memory type */
 .ch.mt-RAM      { background: #2a2700; }
 .ch.mt-ROM      { background: #2a1010; }
@@ -395,9 +397,9 @@ body {
 .ch.ral-mmio-reg .ctitle { color: #a5d6a7; }  /* light green — RAL register title */
 /* Memory type badge */
 .cbadge { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-family: var(--font-code); font-weight: 500; }
-.ub-card.sel-mal { border: 4px solid #ffffff; box-shadow: 0 0 0 3px #ffffff50, var(--shadow-lg); }
-.ub-card.sel-ral { border: 4px solid #ffffff; box-shadow: 0 0 0 3px #ffffff50, var(--shadow-lg); }
-.ub-card.sel-multi { border: 4px solid var(--cyan) !important; box-shadow: 0 0 0 3px #4fc3f740, var(--shadow-lg) !important; }
+.ub-card.sel-mal   { outline: 3px solid #ffffff; outline-offset: 1px; box-shadow: 0 0 0 5px #ffffff30, var(--shadow-lg); }
+.ub-card.sel-ral   { outline: 3px solid #ffffff; outline-offset: 1px; box-shadow: 0 0 0 5px #ffffff30, var(--shadow-lg); }
+.ub-card.sel-multi { outline: 3px solid var(--cyan) !important; outline-offset: 1px; box-shadow: 0 0 0 5px #4fc3f730, var(--shadow-lg) !important; }
 
 /* Rubber-band selection rect */
 #rubber-band {
@@ -656,7 +658,7 @@ body {
     <div class="mbody">
       <div class="prop-grp">
         <label class="prop-lbl">Segment ID</label>
-        <input class="prop-in" id="mal-id" placeholder="e.g. SEG_GPIO" oninput="clearFieldError('mal-id-err')" />
+        <input class="prop-in" id="mal-id" placeholder="e.g. SEG_GPIO" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');clearFieldError('mal-id-err')" />
         <span class="field-err" id="mal-id-err"></span>
       </div>
       <div class="prop-grp">
@@ -705,7 +707,7 @@ body {
     <div class="mbody" style="max-height:70vh;overflow-y:auto">
       <div class="prop-grp">
         <label class="prop-lbl">Name <span style="color:var(--red)">*</span></label>
-        <input class="prop-in" id="ral-name" placeholder="e.g. CTRL_REG" oninput="clearFieldError('ral-name-err');renderModalBitfields()" />
+        <input class="prop-in" id="ral-name" placeholder="e.g. CTRL_REG" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');clearFieldError('ral-name-err');renderModalBitfields()" />
         <span class="field-err" id="ral-name-err"></span>
       </div>
       <div class="prop-grp">
@@ -715,7 +717,7 @@ body {
           <option value="INTERNAL">INTERNAL</option>
         </select>
       </div>
-      <div class="prop-grp" id="ral-core-grp">
+      <div class="prop-grp" id="ral-core-grp" style="display:none">
         <label class="prop-lbl">Core (≥ 0)</label>
         <input class="prop-in" id="ral-core" type="number" min="0" value="0" disabled placeholder="0, 1, 2…" />
       </div>
@@ -737,12 +739,19 @@ body {
         <label class="prop-lbl">Access Widths</label>
         <div id="ral-access-checkboxes" style="display:flex;flex-direction:column;gap:4px;padding:4px 0;"></div>
       </div>
+      <div class="prop-grp" id="ral-internal-access-grp" style="display:none">
+        <label class="prop-lbl">Register Access</label>
+        <select class="prop-sel" id="ral-internal-access">
+          <option value="RW">RW (Read/Write)</option>
+          <option value="RO">RO (Read Only)</option>
+        </select>
+      </div>
       <div class="prop-grp">
         <label class="prop-lbl">After Reset Value (hex)</label>
         <input class="prop-in" id="ral-reset" placeholder="e.g. 0x00000000" value="0x00000000" />
       </div>
       <div class="prop-grp">
-        <label class="prop-lbl">Default Bitfield Access</label>
+        <label class="prop-lbl">Access Type</label>
         <select class="prop-sel" id="ral-default-bf-access" onchange="ralModalUpdateFields();renderModalBitfields()">
           <option value="RW">RW (Read/Write)</option>
           <option value="RO">RO (Read Only)</option>
@@ -761,34 +770,71 @@ body {
 
       <!-- Bitfields section -->
       <div class="prop-grp" style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-          <span class="prop-lbl" style="margin:0">Bit Fields</span>
-          <button onclick="modalAddBitfield()" type="button" style="background:var(--blue-soft);color:#fff;border:none;border-radius:3px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer">+ Add field</button>
-        </div>
-        <div id="ral-bf-list" style="display:flex;flex-direction:column;gap:3px;min-height:0"></div>
-        <div id="ral-bf-empty" style="display:none"></div>
+        <label class="prop-lbl" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:4px">
+          <input type="checkbox" id="ral-bf-chk" onchange="ralToggleBitfields()" style="width:14px;height:14px;accent-color:var(--blue);cursor:pointer"/>
+          Enable Bitfields
+        </label>
+        <div id="ral-bf-summary" style="display:none;font-size:10px;color:var(--green);margin-top:2px"></div>
       </div>
 
       <div class="prop-grp" style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
         <label class="prop-lbl" style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="ral-enum-chk" onchange="ralModalUpdateFields()" style="width:14px;height:14px;accent-color:var(--blue);cursor:pointer"/>
-          Enumerable (create N instances)
+          Create N instances
         </label>
       </div>
       <div class="prop-grp" id="ral-enum-grp" style="display:none">
-        <label class="prop-lbl">Count N (≥ 2)</label>
-        <input class="prop-in" id="ral-enum-n" type="number" min="2" value="2" placeholder="e.g. 4" />
-        <span style="font-size:10px;color:var(--text3);margin-top:2px">Registers will be created at base address + n × (size/8) bytes each</span>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1">
+            <label class="prop-lbl">Count N (≥ 2)</label>
+            <input class="prop-in" id="ral-enum-n" type="number" min="2" value="2" placeholder="e.g. 4" />
+          </div>
+          <div style="flex:1">
+            <label class="prop-lbl">Offset (bytes, ≥ reg size/8)</label>
+            <input class="prop-in" id="ral-enum-offset" type="number" min="1" value="4" placeholder="e.g. 4" oninput="clearFieldError('ral-enum-offset-err')" />
+          </div>
+        </div>
+        <span class="field-err" id="ral-enum-offset-err"></span>
+        <span style="font-size:10px;color:var(--text3);margin-top:2px">Registers named NAME0, NAME1, … at base address + n × offset. Offset must be ≥ register size in bytes.</span>
       </div>
     </div>
     <div class="mfoot">
       <button class="btn btn-ghost" onclick="closeModal('modal-ral')">Cancel</button>
-      <button class="btn btn-blue" onclick="confirmAddRal()">Add Register</button>
+      <button class="btn btn-blue" onclick="confirmAddRal()">Add</button>
     </div>
   </div>
 </div>
 
-<!-- MODAL: Edit MAL Segment -->
+<!-- MODAL: Bitfield Editor (popup from Enable Bitfields checkbox) -->
+<div class="overlay" id="modal-bf-editor">
+  <div class="modal" style="min-width:440px;max-width:520px">
+    <div class="mhdr" style="color:var(--blue)">
+      <span>⚑ Bitfield Editor</span>
+      <button class="mx" onclick="cancelBfEditor()">×</button>
+    </div>
+    <div class="mbody" style="max-height:65vh;overflow-y:auto">
+      <!-- Warning -->
+      <div style="background:#3a2e00;border:1px solid var(--amber);border-radius:4px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:flex-start;gap:8px">
+        <span style="color:var(--amber);font-size:14px;flex-shrink:0">⚠</span>
+        <span id="bf-editor-warn" style="font-size:11px;color:var(--amber);line-height:1.5"></span>
+      </div>
+      <!-- Field list -->
+      <div id="bf-editor-list" style="display:flex;flex-direction:column;gap:3px;margin-bottom:8px"></div>
+      <!-- Add button -->
+      <button onclick="bfEditorAddField()" type="button" id="bf-editor-add-btn"
+        style="width:100%;background:var(--bg3);border:1px dashed var(--border2);border-radius:4px;color:var(--blue);font-size:12px;font-weight:600;padding:7px;cursor:pointer;transition:background 0.1s">
+        + Add Bitfield
+      </button>
+    </div>
+    <div class="mfoot">
+      <button class="btn btn-ghost" onclick="cancelBfEditor()">Cancel</button>
+      <button class="btn btn-blue" id="bf-editor-ok" onclick="confirmBfEditor()" disabled
+        style="opacity:0.4;cursor:not-allowed">OK</button>
+    </div>
+  </div>
+</div>
+
+
 <div class="overlay" id="modal-edit-mal">
   <div class="modal">
     <div class="mhdr">
@@ -798,7 +844,7 @@ body {
     <div class="mbody">
       <div class="prop-grp">
         <label class="prop-lbl">Segment ID</label>
-        <input class="prop-in" id="edit-mal-id" placeholder="e.g. SEG_GPIO" oninput="clearFieldError('edit-mal-id-err')" />
+        <input class="prop-in" id="edit-mal-id" placeholder="e.g. SEG_GPIO" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');clearFieldError('edit-mal-id-err')" />
         <span class="field-err" id="edit-mal-id-err"></span>
       </div>
       <div class="prop-grp">
@@ -847,7 +893,7 @@ body {
     <div class="mbody">
       <div class="prop-grp">
         <label class="prop-lbl">Name</label>
-        <input class="prop-in" id="edit-ral-name" placeholder="e.g. CTRL_REG" oninput="clearFieldError('edit-ral-name-err')" />
+        <input class="prop-in" id="edit-ral-name" placeholder="e.g. CTRL_REG" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');clearFieldError('edit-ral-name-err')" />
         <span class="field-err" id="edit-ral-name-err"></span>
       </div>
       <div class="prop-grp">
@@ -1160,6 +1206,12 @@ function openAdd(layer) {
     if (resValGrp) resValGrp.style.display = 'none';
     document.getElementById('ral-enum-chk').checked = false;
     document.getElementById('ral-enum-n').value = '2';
+    document.getElementById('ral-enum-offset').value = '4';
+    // Reset bitfield checkbox
+    const bfChk = document.getElementById('ral-bf-chk');
+    if (bfChk) { bfChk.checked = false; }
+    const bfSummary = document.getElementById('ral-bf-summary');
+    if (bfSummary) { bfSummary.style.display = 'none'; bfSummary.textContent = ''; }
     _modalBitfields = [];
     renderModalBitfields();
     ralModalUpdateFields();
@@ -1171,7 +1223,7 @@ function openAdd(layer) {
 
 function closeModal(id) {
   if (id) { document.getElementById(id).classList.remove('open'); return; }
-  ['modal-mal','modal-ral','modal-save','modal-edit-mal','modal-edit-ral'].forEach(mid => {
+  ['modal-mal','modal-ral','modal-save','modal-edit-mal','modal-edit-ral','modal-bf-editor'].forEach(mid => {
     const el = document.getElementById(mid);
     if (el) el.classList.remove('open');
   });
@@ -1215,6 +1267,17 @@ function isIdDuplicate(name, excludeNodeId) {
   return S.nodes.some(n => n.name === name && n.id !== excludeNodeId);
 }
 
+/**
+ * Validates an identifier name: uppercase letters, digits, underscores; must start with a letter.
+ * Returns an error string or '' if valid.
+ */
+function validateIdentifier(name, label) {
+  if (!name) return `${label} is required`;
+  if (!/^[A-Z][A-Z0-9_]*$/.test(name))
+    return `${label} must start with a letter and contain only A–Z, 0–9, _`;
+  return '';
+}
+
 function segmentsOverlap(addrA, sizeA, addrB, sizeB) {
   // [addrA, addrA+sizeA) overlaps [addrB, addrB+sizeB)?
   return addrA < (addrB + sizeB) && addrB < (addrA + sizeA);
@@ -1232,16 +1295,40 @@ function checkSegmentOverlap(addr, size, excludeNodeId) {
   return null;
 }
 
+/**
+ * Checks addr+size against ALL occupied memory: MAL segments + RAL MMIO registers.
+ * excludeNodeId: node to skip (current one being edited/created).
+ * Returns the conflicting node or null.
+ */
+function checkAddressOverlap(addr, size, excludeNodeId) {
+  for (const n of S.nodes) {
+    if (n.id === excludeNodeId) continue;
+    if (n.layer === 'mal') {
+      const eAddr = parseHex(n.segAddr);
+      const eSize = Number(n.segSize);
+      if (!isNaN(eAddr) && eSize > 0 && segmentsOverlap(addr, size, eAddr, eSize))
+        return { node: n, label: `MAL segment "${n.name}" [${n.segAddr}, +${n.segSize}B]` };
+    } else if (n.layer === 'ral' && n.regType === 'MMIO' && n.regAddr) {
+      const eAddr = parseHex(n.regAddr);
+      const eSize = (n.regSize || 32) / 8;
+      if (!isNaN(eAddr) && eSize > 0 && segmentsOverlap(addr, size, eAddr, eSize))
+        return { node: n, label: `RAL register "${n.name}" [${n.regAddr}, +${eSize}B]` };
+    }
+  }
+  return null;
+}
+
 function confirmAddMal() {
   let valid = true;
   clearFieldError('mal-id-err');
   clearFieldError('mal-addr-err');
   clearFieldError('mal-size-err');
 
-  // ID — required
+  // ID — required, uppercase letters/digits/underscore, starts with letter
   const segId = document.getElementById('mal-id').value.trim();
-  if (!segId) {
-    setFieldError('mal-id-err', 'Segment ID is required');
+  const segIdErr = validateIdentifier(segId, 'Segment ID');
+  if (segIdErr) {
+    setFieldError('mal-id-err', segIdErr);
     valid = false;
   } else if (isIdDuplicate(segId, null)) {
     setFieldError('mal-id-err', `ID "${segId}" already exists`);
@@ -1275,10 +1362,9 @@ function confirmAddMal() {
 
   // Overlap check (only if both addr and size are valid and size > 0)
   if (valid && !isNaN(addr) && size > 0) {
-    const overlap = checkSegmentOverlap(addr, size, null);
-    if (overlap) {
-      setFieldError('mal-addr-err',
-        `Overlaps with "${overlap.name}" [${overlap.segAddr}, +${overlap.segSize}B]`);
+    const ov = checkAddressOverlap(addr, size, null);
+    if (ov) {
+      setFieldError('mal-addr-err', `Overlaps with ${ov.label}`);
       valid = false;
     }
   }
@@ -1334,8 +1420,9 @@ function confirmEditMal() {
   clearFieldError('edit-mal-addr-err');
 
   const segId = document.getElementById('edit-mal-id').value.trim();
-  if (!segId) {
-    setFieldError('edit-mal-id-err', 'Segment ID is required');
+  const segIdErr = validateIdentifier(segId, 'Segment ID');
+  if (segIdErr) {
+    setFieldError('edit-mal-id-err', segIdErr);
     valid = false;
   } else if (isIdDuplicate(segId, n.id)) {
     setFieldError('edit-mal-id-err', `ID "${segId}" already exists — choose a different name`);
@@ -1358,10 +1445,9 @@ function confirmEditMal() {
   }
   if (!isNaN(addr) && !isNaN(size) && editSizeRaw !== '' && size > 0) {
     // exclude current node from overlap check
-    const overlap = checkSegmentOverlap(addr, size, n.id);
-    if (overlap) {
-      setFieldError('edit-mal-addr-err',
-        `Overlaps with "${overlap.name}" [${overlap.segAddr}, +${overlap.segSize}B]`);
+    const ov = checkAddressOverlap(addr, size, n.id);
+    if (ov) {
+      setFieldError('edit-mal-addr-err', `Overlaps with ${ov.label}`);
       valid = false;
     }
   }
@@ -1387,8 +1473,10 @@ function confirmEditRal() {
 
   clearFieldError('edit-ral-name-err');
   const name = document.getElementById('edit-ral-name').value.trim();
-  if (!name) {
-    setFieldError('edit-ral-name-err', 'Name is required');
+  const nameErr = validateIdentifier(name, 'Name');
+  if (nameErr) {
+    setFieldError('edit-ral-name-err', nameErr);
+    document.getElementById('edit-ral-name').focus();
     return;
   }
   if (isIdDuplicate(name, n.id)) {
@@ -1406,6 +1494,250 @@ function confirmEditRal() {
   status(`Register "${n.name}" updated`);
 }
 
+function ralToggleBitfields() {
+  const checked = document.getElementById('ral-bf-chk').checked;
+  if (checked) {
+    // Open the dedicated bitfield editor popup
+    openBfEditor();
+  } else {
+    // Unchecking: if there are already-defined modal bitfields, ask confirmation first
+    if (_modalBitfields.length > 0) {
+      // Revert checkbox visually until confirmed
+      document.getElementById('ral-bf-chk').checked = true;
+      _confirmCallback = () => {
+        _modalBitfields = [];
+        document.getElementById('ral-bf-chk').checked = false;
+        const bfSummary = document.getElementById('ral-bf-summary');
+        if (bfSummary) { bfSummary.style.display = 'none'; bfSummary.textContent = ''; }
+        status('Bitfields cleared');
+      };
+      document.getElementById('confirm-msg').textContent =
+        `This will delete all ${_modalBitfields.length} bitfield(s) you have defined. Continue?`;
+      const okBtn = document.getElementById('confirm-ok-btn');
+      okBtn.textContent = 'Delete All'; okBtn.style.background = 'var(--red)';
+      document.querySelector('#modal-confirm .mhdr span').textContent = '⚠ Remove Bitfields';
+      document.querySelector('#modal-confirm .mhdr').style.color = '';
+      document.getElementById('modal-confirm').classList.add('open');
+      return;
+    }
+    // No fields defined yet — just clear and hide summary
+    _modalBitfields = [];
+    const bfSummary = document.getElementById('ral-bf-summary');
+    if (bfSummary) { bfSummary.style.display = 'none'; bfSummary.textContent = ''; }
+  }
+}
+
+function openBfEditor() {
+  const regSize = parseInt(document.getElementById('ral-size').value) || 32;
+  renderBfEditorList();
+  updateBfEditorState();
+  document.getElementById('modal-bf-editor').classList.add('open');
+}
+
+function cancelBfEditor() {
+  document.getElementById('modal-bf-editor').classList.remove('open');
+  if (_bfEditorNodeTarget) {
+    // Editing existing node: discard changes, leave node as-is, re-render props to restore checkbox state
+    _bfEditorNodeTarget = null;
+    const sizeProxy = document.getElementById('ral-size');
+    if (sizeProxy && sizeProxy.dataset.prevSize) {
+      sizeProxy.value = sizeProxy.dataset.prevSize;
+      delete sizeProxy.dataset.prevSize;
+    }
+    _modalBitfields = [];
+    renderProps(); // restores checkbox to actual node state
+  } else {
+    // New register modal: discard, uncheck checkbox, clear summary
+    _modalBitfields = [];
+    document.getElementById('ral-bf-chk').checked = false;
+    const bfSummary = document.getElementById('ral-bf-summary');
+    if (bfSummary) { bfSummary.style.display = 'none'; bfSummary.textContent = ''; }
+  }
+}
+
+
+function confirmBfEditor() {
+  const regSize = parseInt(document.getElementById('ral-size').value) || 32;
+  const usedBits = new Set();
+  _modalBitfields.forEach(f => { for (let b = f.bitStart; b <= f.bitEnd; b++) usedBits.add(b); });
+  if (usedBits.size < regSize) return; // safety guard — OK should be disabled anyway
+
+  document.getElementById('modal-bf-editor').classList.remove('open');
+
+  if (_bfEditorNodeTarget) {
+    // Editing an existing node: save bitfields back, rebuild default, re-render
+    const n = _bfEditorNodeTarget;
+    _bfEditorNodeTarget = null;
+    // Restore ral-size proxy if we changed it
+    const sizeProxy = document.getElementById('ral-size');
+    if (sizeProxy && sizeProxy.dataset.prevSize) {
+      sizeProxy.value = sizeProxy.dataset.prevSize;
+      delete sizeProxy.dataset.prevSize;
+    }
+    n.bitfields = _modalBitfields.map((f, i) => ({...f, _id: i + 1, isDefault: false}));
+    n._nextBfId = _modalBitfields.length + 1;
+    // No gaps allowed when bf enabled — all bits covered, no need for default fragments
+    n.bitfields.sort((a, b) => b.bitStart - a.bitStart);
+    _modalBitfields = [];
+    renderTree(); renderCanvas(); renderProps();
+    status(`Bitfields saved — ${n.bitfields.length} field(s)`);
+  } else {
+    // New register modal: show summary line
+    const summary = document.getElementById('ral-bf-summary');
+    summary.style.display = '';
+    summary.textContent = `✓ ${_modalBitfields.length} field(s) defined, all ${regSize} bits covered`;
+  }
+}
+function openBfEditorForNode(n) {
+  const regSize = n.regSize || 32;
+  // Seed _modalBitfields from node's existing user bitfields
+  _modalBitfields = (n.bitfields||[])
+    .filter(f => !f.isDefault)
+    .map(f => ({...f}));
+
+  // Override regSize lookup for updateBfEditorState to use node's size
+  // We temporarily store it on a hidden input (reuse ral-size if available, else use data attr)
+  const sizeProxy = document.getElementById('ral-size');
+  const prevSize = sizeProxy ? sizeProxy.value : '32';
+  if (sizeProxy) sizeProxy.value = String(regSize);
+
+  renderBfEditorList();
+  updateBfEditorState();
+  document.getElementById('modal-bf-editor').classList.add('open');
+
+  // When the popup's OK is confirmed, save back to the node
+  // We replace confirmBfEditor temporarily via a flag
+  _bfEditorNodeTarget = n;
+  if (sizeProxy) sizeProxy.dataset.prevSize = prevSize;
+}
+
+// Global: if set, confirmBfEditor saves to this node instead of to summary line
+let _bfEditorNodeTarget = null;
+
+function renderBfEditorList() {
+  const list = document.getElementById('bf-editor-list');
+  list.innerHTML = '';
+  const bfColor = f => f.access === 'RO' ? '#ef5350' : f.access === 'RW' ? '#66bb6a' : f.access === 'WO' ? '#ffb74d' : '#9e9e9e';
+  const sorted = [..._modalBitfields].sort((a, b) => b.bitStart - a.bitStart);
+  sorted.forEach(f => {
+    const color = bfColor(f);
+    const row = document.createElement('div');
+    row.style.cssText = `display:flex;gap:4px;align-items:center;padding:4px 8px;background:var(--bg3);border-radius:3px;border-left:3px solid ${color}`;
+    row.innerHTML = `
+      <div style="flex:1;min-width:0">
+        <span style="font-size:11px;font-weight:600;color:${color};font-family:var(--font-code)">${f.name}</span>
+        <span style="font-size:10px;color:var(--text3);margin-left:6px">[${f.bitEnd}:${f.bitStart}] ${f.access}</span>
+      </div>
+      <button onclick="bfEditorRemove(${f._id})" type="button"
+        style="background:transparent;border:none;color:#ef535060;cursor:pointer;font-size:14px;padding:2px 4px;line-height:1;border-radius:3px"
+        onmouseover="this.style.color='#ef5350';this.style.background='#3a1515'"
+        onmouseout="this.style.color='#ef535060';this.style.background='transparent'"
+        title="Remove">🗑</button>`;
+    list.appendChild(row);
+  });
+}
+
+function updateBfEditorState() {
+  const regSize = parseInt(document.getElementById('ral-size').value) || 32;
+  const usedBits = new Set();
+  _modalBitfields.forEach(f => { for (let b = f.bitStart; b <= f.bitEnd; b++) usedBits.add(b); });
+  const free = regSize - usedBits.size;
+
+  const warn = document.getElementById('bf-editor-warn');
+  const okBtn = document.getElementById('bf-editor-ok');
+  const addBtn = document.getElementById('bf-editor-add-btn');
+
+  if (free === 0) {
+    warn.textContent = `✓ All ${regSize} bits are covered. You can confirm.`;
+    warn.parentElement.style.background = '#0a2e0a';
+    warn.parentElement.style.borderColor = 'var(--green)';
+    warn.style.color = 'var(--green)';
+    warn.previousElementSibling.style.color = 'var(--green)';
+    okBtn.disabled = false;
+    okBtn.style.opacity = '1';
+    okBtn.style.cursor = 'pointer';
+    addBtn.style.display = 'none'; // no more space
+  } else {
+    warn.textContent = `⚠ ${free} of ${regSize} bit(s) not yet covered — all bits must be assigned before confirming.`;
+    warn.parentElement.style.background = '#3a2e00';
+    warn.parentElement.style.borderColor = 'var(--amber)';
+    warn.style.color = 'var(--amber)';
+    warn.previousElementSibling.style.color = 'var(--amber)';
+    okBtn.disabled = true;
+    okBtn.style.opacity = '0.4';
+    okBtn.style.cursor = 'not-allowed';
+    addBtn.style.display = '';
+  }
+}
+
+function bfEditorRemove(bfId) {
+  _modalBitfields = _modalBitfields.filter(f => f._id !== bfId);
+  renderBfEditorList();
+  updateBfEditorState();
+}
+
+function bfEditorAddField() {
+  const regSize = parseInt(document.getElementById('ral-size').value) || 32;
+  const usedBits = new Set();
+  _modalBitfields.forEach(f => { for (let b = f.bitStart; b <= f.bitEnd; b++) usedBits.add(b); });
+  let nextStart = 0;
+  while (usedBits.has(nextStart) && nextStart < regSize) nextStart++;
+  if (nextStart >= regSize) return;
+  const maxSize = regSize - nextStart;
+
+  _confirmCallback = () => {
+    const bfName   = document.getElementById('bf-name').value.trim();
+    const bfSize   = parseInt(document.getElementById('bf-size').value);
+    const bfAccess = document.getElementById('bf-access').value;
+    const errEl    = document.getElementById('bf-err');
+    const bfEnd    = nextStart + bfSize - 1;
+
+    if (!bfName) { errEl.textContent = 'Name is required'; _confirmCallback = null; bfEditorAddField(); return; }
+    if (!/^[A-Z][A-Z0-9_]*$/.test(bfName)) { errEl.textContent = 'Must start with a letter, A–Z 0–9 _'; _confirmCallback = null; bfEditorAddField(); return; }
+    const regBaseName = document.getElementById('ral-name').value.trim();
+    if (_modalBitfields.some(f => f.name === bfName) || bfName === regBaseName) {
+      errEl.textContent = `"${bfName}" already exists`; _confirmCallback = null; bfEditorAddField(); return;
+    }
+    if (isNaN(bfSize) || bfSize < 1 || bfSize > maxSize) {
+      errEl.textContent = `Size must be 1–${maxSize} bit(s)`; _confirmCallback = null; bfEditorAddField(); return;
+    }
+    _modalBitfields.push({ _id: _modalBitfields.length + 1, name: bfName, bitStart: nextStart, bitEnd: bfEnd, access: bfAccess });
+    _modalBitfields.sort((a, b) => b.bitStart - a.bitStart);
+    renderBfEditorList();
+    updateBfEditorState();
+  };
+
+  document.getElementById('confirm-msg').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="prop-grp"><label class="prop-lbl">Field Name (A–Z, 0–9, _)</label>
+        <input class="prop-in" id="bf-name" placeholder="e.g. EN, MODE" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')"/></div>
+      <div style="display:flex;gap:8px">
+        <div class="prop-grp" style="flex:1"><label class="prop-lbl">Bit Start (fixed)</label>
+          <input class="prop-in" id="bf-start-display" value="${nextStart}" disabled style="opacity:0.5"/></div>
+        <div class="prop-grp" style="flex:1"><label class="prop-lbl">Size (bits, 1–${maxSize})</label>
+          <input class="prop-in" id="bf-size" type="number" min="1" max="${maxSize}" value="1"/></div>
+      </div>
+      <div class="prop-grp"><label class="prop-lbl">Access</label>
+        <select class="prop-sel" id="bf-access">
+          <option value="RW">RW (Read/Write)</option>
+          <option value="RO">RO (Read Only)</option>
+          <option value="WO">WO (Write Only)</option>
+          <option value="RESERVED">RESERVED</option>
+        </select>
+      </div>
+      <span class="field-err" id="bf-err"></span>
+    </div>`;
+  const okBtn = document.getElementById('confirm-ok-btn');
+  okBtn.textContent = 'Add Field'; okBtn.style.background = 'var(--blue-soft)';
+  document.querySelector('#modal-confirm .mhdr span').textContent = '+ Add Bit Field';
+  document.querySelector('#modal-confirm .mhdr').style.color = 'var(--blue)';
+  document.getElementById('modal-confirm').classList.add('open');
+  setTimeout(() => document.getElementById('bf-name').focus(), 80);
+}
+
+function updateBfCoverageInfo() { /* legacy stub — no-op, replaced by updateBfEditorState */ }
+function renderModalBitfields() { /* legacy stub — no-op, list rendered inside popup */ }
+
 function ralModalUpdateFields() {
   const regtype = document.getElementById('ral-regtype').value;
   const size    = parseInt(document.getElementById('ral-size').value) || 32;
@@ -1416,6 +1748,11 @@ function ralModalUpdateFields() {
   const coreIn = document.getElementById('ral-core');
   coreIn.disabled = !isInternal;
   coreIn.style.opacity = isInternal ? '1' : '0.4';
+  document.getElementById('ral-core-grp').style.display = isInternal ? '' : 'none';
+
+  // INTERNAL access type: only for INTERNAL
+  const intAccessGrp = document.getElementById('ral-internal-access-grp');
+  if (intAccessGrp) intAccessGrp.style.display = isInternal ? '' : 'none';
 
   // Address and access: only for MMIO
   document.getElementById('ral-addr-grp').style.display = isInternal ? 'none' : '';
@@ -1442,7 +1779,6 @@ function ralModalUpdateFields() {
     const chk = document.createElement('input');
     chk.type = 'checkbox'; chk.value = w;
     chk.style.cssText = `width:13px;height:13px;accent-color:var(--blue);cursor:${isMandatory ? 'not-allowed' : 'pointer'}`;
-    // The checkbox matching the register size is always checked and cannot be unchecked
     chk.checked = isMandatory || (prevSelected.size ? prevSelected.has(String(w)) : false);
     if (isMandatory) {
       chk.disabled = true;
@@ -1454,8 +1790,16 @@ function ralModalUpdateFields() {
     accDiv.appendChild(lbl);
   });
 
-  // Enumerable section
+  // Enumerable section — update offset minimum
   document.getElementById('ral-enum-grp').style.display = enumEnabled ? '' : 'none';
+  const offsetIn = document.getElementById('ral-enum-offset');
+  if (offsetIn) {
+    const minOffset = size / 8;
+    offsetIn.min = minOffset;
+    if (parseInt(offsetIn.value) < minOffset) offsetIn.value = minOffset;
+  }
+
+  updateBfCoverageInfo();
 }
 
 // ── Temporary bitfield storage while the "Add Register" modal is open ──
@@ -1499,144 +1843,15 @@ function getModalDefaultBf() {
   }));
 }
 
-function renderModalBitfields() {
-  const list  = document.getElementById('ral-bf-list');
-  const empty = document.getElementById('ral-bf-empty');
-  if (!list) return;
-  list.innerHTML = ''; // ← clear before re-render
-  const bfColor = (f, i) => f.access === 'RO' ? '#ef5350' : f.access === 'RW' ? '#66bb6a' : f.access === 'WO' ? '#ffb74d' : '#9e9e9e';
-
-  // Compute and prepend the live default BF preview
-  const defaultFrags = getModalDefaultBf();
-  const allFields = [...defaultFrags, ..._modalBitfields];
-  allFields.sort((a, b) => b.bitStart - a.bitStart);
-
-  allFields.forEach((f, i) => {
-    const color = bfColor(f, i);
-    const row = document.createElement('div');
-    row.style.cssText = `display:flex;gap:4px;align-items:center;padding:4px 6px;background:var(--bg3);border-radius:3px;border-left:3px solid ${color};${f.isDefault ? 'opacity:0.8' : ''}`;
-
-    const nameLabel = f.isDefault
-      ? `<span style="font-size:11px;font-weight:600;color:${color};font-family:var(--font-code)">${f.name}</span>
-         <span style="font-size:9px;color:var(--text3);margin-left:4px;font-style:italic">(default)</span>`
-      : `<span style="font-size:11px;font-weight:600;color:${color};font-family:var(--font-code)">${f.name}</span>`;
-
-    const rangeLabel = `[${f.bitEnd}:${f.bitStart}] ${f.access}`;
-    const reservedLine = f.isDefault && f.access === 'RESERVED'
-      ? `<div style="font-size:10px;color:var(--text3);margin-top:1px">reset val: <span style="color:var(--text2)">${f.reservedDefaultVal || '0x00000000'}</span></div>`
-      : '';
-
-    const actionBtn = f.isDefault
-      ? `<span style="font-size:14px;padding:2px 5px;color:var(--text3);opacity:0.5" title="Default bitfield — cannot be deleted">🔒</span>`
-      : `<button onclick="modalRemoveBitfield(${f._id})" type="button"
-           style="background:transparent;border:none;color:#ef535060;cursor:pointer;font-size:14px;padding:2px 4px;line-height:1;border-radius:3px;transition:color 0.1s,background 0.1s"
-           onmouseover="this.style.color='#ef5350';this.style.background='#3a1515'"
-           onmouseout="this.style.color='#ef535060';this.style.background='transparent'"
-           title="Remove bitfield">🗑</button>`;
-
-    row.innerHTML = `
-      <div style="flex:1;min-width:0">
-        <div style="display:flex;align-items:center;gap:0">${nameLabel}</div>
-        <div style="font-size:10px;color:var(--text3)">${rangeLabel}</div>
-        ${reservedLine}
-      </div>
-      ${actionBtn}`;
-    list.appendChild(row);
-  });
-
-  if (empty) empty.style.display = allFields.length ? 'none' : '';
-}
-
-function modalRemoveBitfield(bfId) {
-  const f = _modalBitfields.find(f => f._id === bfId);
-  if (!f) return;
-  _confirmCallback = () => {
-    _modalBitfields = _modalBitfields.filter(f => f._id !== bfId);
-    renderModalBitfields();
-    status(`Bitfield removed`);
-  };
-  document.getElementById('confirm-msg').textContent = `Remove bitfield "${f.name}" [${f.bitEnd}:${f.bitStart}]?`;
-  const okBtn = document.getElementById('confirm-ok-btn');
-  okBtn.textContent = 'Remove'; okBtn.style.background = 'var(--red)';
-  document.querySelector('#modal-confirm .mhdr span').textContent = '⚠ Remove Bitfield';
-  document.querySelector('#modal-confirm .mhdr').style.color = '';
-  document.getElementById('modal-confirm').classList.add('open');
-}
-
-function modalAddBitfield() {
-  const regSize = parseInt(document.getElementById('ral-size').value) || 32;
-  // Next start = first unoccupied bit from LSB
-  const usedBits = new Set();
-  _modalBitfields.forEach(f => { for (let b = f.bitStart; b <= f.bitEnd; b++) usedBits.add(b); });
-  let nextStart = 0;
-  while (usedBits.has(nextStart) && nextStart < regSize) nextStart++;
-
-  if (nextStart >= regSize) {
-    status('All bits are already assigned — no space left for a new bitfield', 'warn');
-    return;
-  }
-
-  const maxSize = regSize - nextStart;
-
-  _confirmCallback = () => {
-    const bfName   = document.getElementById('bf-name').value.trim();
-    const bfSize   = parseInt(document.getElementById('bf-size').value);
-    const bfAccess = document.getElementById('bf-access').value;
-    const errEl    = document.getElementById('bf-err');
-    const bfStart  = nextStart;
-    const bfEnd    = nextStart + bfSize - 1;
-
-    if (!bfName) { errEl.textContent = 'Name is required'; _confirmCallback = null; modalAddBitfield(); return; }
-    if (!/^[A-Z][A-Z0-9_]*$/.test(bfName)) { errEl.textContent = 'Name must start with a letter and contain only A–Z, 0–9, _'; _confirmCallback = null; modalAddBitfield(); return; }
-    const regBaseName = document.getElementById('ral-name').value.trim();
-    if (_modalBitfields.some(f => f.name === bfName) || bfName === regBaseName) {
-      errEl.textContent = `A field named "${bfName}" already exists in this register`; _confirmCallback = null; modalAddBitfield(); return;
-    }
-    if (isNaN(bfSize) || bfSize < 1 || bfSize > maxSize) {
-      errEl.textContent = `Size must be between 1 and ${maxSize} bit(s)`; _confirmCallback = null; modalAddBitfield(); return;
-    }
-    _modalBitfields.push({ _id: _modalBitfields.length + 1, name: bfName, bitStart: bfStart, bitEnd: bfEnd, access: bfAccess });
-    _modalBitfields.sort((a, b) => b.bitStart - a.bitStart);
-    renderModalBitfields();
-    status(`Bitfield "${bfName}" [${bfEnd}:${bfStart}] ready`);
-  };
-  document.getElementById('confirm-msg').innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <div class="prop-grp"><label class="prop-lbl">Field Name (A–Z, 0–9, _)</label><input class="prop-in" id="bf-name" placeholder="e.g. EN, MODE" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')"/></div>
-      <div style="display:flex;gap:8px">
-        <div class="prop-grp" style="flex:1">
-          <label class="prop-lbl">Bit Start (fixed)</label>
-          <input class="prop-in" id="bf-start-display" value="${nextStart}" disabled style="opacity:0.5"/>
-        </div>
-        <div class="prop-grp" style="flex:1">
-          <label class="prop-lbl">Size (bits, 1–${maxSize})</label>
-          <input class="prop-in" id="bf-size" type="number" min="1" max="${maxSize}" value="1"/>
-        </div>
-      </div>
-      <div class="prop-grp"><label class="prop-lbl">Access</label>
-        <select class="prop-sel" id="bf-access">
-          <option value="RW">RW (Read/Write)</option>
-          <option value="RO">RO (Read Only)</option>
-          <option value="WO">WO (Write Only)</option>
-          <option value="RESERVED">RESERVED (grey)</option>
-        </select>
-      </div>
-      <span class="field-err" id="bf-err"></span>
-    </div>`;
-  const okBtn = document.getElementById('confirm-ok-btn');
-  okBtn.textContent = 'Add Field'; okBtn.style.background = 'var(--blue-soft)';
-  document.querySelector('#modal-confirm .mhdr span').textContent = '+ Add Bit Field';
-  document.querySelector('#modal-confirm .mhdr').style.color = 'var(--blue)';
-  document.getElementById('modal-confirm').classList.add('open');
-  setTimeout(() => document.getElementById('bf-name').focus(), 80);
-}
 
 
 function confirmAddRal() {
   clearFieldError('ral-name-err');
   const name = document.getElementById('ral-name').value.trim();
-  if (!name) {
-    setFieldError('ral-name-err', 'Name is required');
+  const nameErr = validateIdentifier(name, 'Name');
+  if (nameErr) {
+    setFieldError('ral-name-err', nameErr);
+    document.getElementById('ral-name').focus();
     return;
   }
 
@@ -1644,6 +1859,7 @@ function confirmAddRal() {
   const regSize = parseInt(document.getElementById('ral-size').value) || 32;
   const coreVal = regType === 'INTERNAL' ? (parseInt(document.getElementById('ral-core').value) ?? 0) : null;
   const regAddr = regType === 'MMIO' ? document.getElementById('ral-addr').value.trim() : null;
+  const internalAccess = regType === 'INTERNAL' ? (document.getElementById('ral-internal-access')?.value || 'RW') : null;
 
   // Base address is mandatory for MMIO
   if (regType === 'MMIO') {
@@ -1668,10 +1884,35 @@ function confirmAddRal() {
   // Build the display name used for uniqueness check
   const displayName = regType === 'INTERNAL' && coreVal !== null ? `${name}_${coreVal}` : name;
 
-  if (isIdDuplicate(displayName, null)) {
-    setFieldError('ral-name-err', `Name "${displayName}" already exists — choose a different name`);
-    document.getElementById('ral-name').focus();
-    return;
+  // For INTERNAL: check uniqueness among registers with the same core
+  if (regType === 'INTERNAL') {
+    // Name + core must be unique: no two INTERNAL registers share same baseName + coreVal
+    const dupInternal = S.nodes.some(n => n.layer === 'ral' && n.regType === 'INTERNAL' &&
+      (n.baseName || n.name.replace(/_\d+$/, '')) === name && n.coreVal === coreVal);
+    if (dupInternal) {
+      setFieldError('ral-name-err', `INTERNAL register "${displayName}" already exists for core ${coreVal}`);
+      document.getElementById('ral-name').focus();
+      return;
+    }
+  } else {
+    if (isIdDuplicate(displayName, null)) {
+      setFieldError('ral-name-err', `Name "${displayName}" already exists — choose a different name`);
+      document.getElementById('ral-name').focus();
+      return;
+    }
+  }
+
+  // Bitfield coverage check: if bitfields are enabled, all bits must be covered
+  const bfEnabled = document.getElementById('ral-bf-chk').checked;
+  if (bfEnabled) {
+    const usedBits = new Set();
+    _modalBitfields.forEach(f => { for (let b = f.bitStart; b <= f.bitEnd; b++) usedBits.add(b); });
+    if (usedBits.size < regSize) {
+      const covered = usedBits.size;
+      const missing = regSize - covered;
+      setFieldError('ral-name-err', `Bitfields enabled but only ${covered}/${regSize} bits covered — add ${missing} more bit(s) before saving`);
+      return;
+    }
   }
 
   // Gather access widths
@@ -1683,47 +1924,71 @@ function confirmAddRal() {
   // Enumerable
   const enumEnabled = document.getElementById('ral-enum-chk').checked;
   const enumN = enumEnabled ? (parseInt(document.getElementById('ral-enum-n').value) || 2) : 1;
-  const stepBytes = regSize / 8;
+  const minOffset = regSize / 8;
+  const offsetBytes = enumEnabled ? (parseInt(document.getElementById('ral-enum-offset').value) || minOffset) : (regSize / 8);
+
+  if (enumEnabled) {
+    if (offsetBytes < minOffset) {
+      setFieldError('ral-enum-offset-err', `Offset must be ≥ ${minOffset} bytes (register size / 8)`);
+      return;
+    }
+  }
+
+  // Overlap check for MMIO (single or multiple instances)
+  if (regType === 'MMIO') {
+    const baseAddrNum = parseHex(regAddr);
+    const regBytes = regSize / 8;
+    for (let idx = 0; idx < enumN; idx++) {
+      const instAddr = baseAddrNum + idx * offsetBytes;
+      // Check against all existing nodes (excluding nothing — these are new)
+      const ov = checkAddressOverlap(instAddr, regBytes, null);
+      if (ov) {
+        const errField = enumEnabled ? 'ral-enum-offset-err' : 'ral-addr-err';
+        setFieldError(errField,
+          `Instance #${idx} at ${toHex(instAddr)} overlaps with ${ov.label}`);
+        return;
+      }
+      // Check within the new batch itself
+      for (let prev = 0; prev < idx; prev++) {
+        const prevAddr = baseAddrNum + prev * offsetBytes;
+        if (segmentsOverlap(instAddr, regBytes, prevAddr, regBytes)) {
+          setFieldError('ral-enum-offset-err',
+            `Instances #${prev} and #${idx} overlap — increase the offset`);
+          return;
+        }
+      }
+    }
+  }
 
   const baseAddr = regAddr && regAddr !== '' ? regAddr : '0x00000000';
   const baseAddrNum = parseHex(baseAddr);
 
   const addedIds = [];
   for (let idx = 0; idx < enumN; idx++) {
-    const baseName  = enumEnabled ? `${name}_${idx}` : name;
+    // N-instance naming: NAME0, NAME1, NAME2... (cardinal number immediately after name, no underscore)
+    const baseName  = enumEnabled ? `${name}${idx}` : name;
     const instCoreVal = regType === 'INTERNAL' && coreVal !== null ? coreVal : null;
     const instDisplayName = regType === 'INTERNAL' && instCoreVal !== null ? `${baseName}_${instCoreVal}` : baseName;
     if (isIdDuplicate(instDisplayName, null)) continue; // skip duplicates silently
     const instAddr = (regType === 'MMIO' && regAddr)
-      ? toHex(baseAddrNum + idx * stepBytes)
+      ? toHex(baseAddrNum + idx * offsetBytes)
       : null;
 
-    // Build the default (full-register) bitfield
-    const defaultBf = {
-      _id: 0,
-      name: baseName,
-      bitStart: 0,
-      bitEnd: regSize - 1,
-      access: defaultBfAccess,
-      isDefault: true,
-      reservedDefaultVal: defaultBfReservedVal
-    };
-
-    // Assign _id to modal bitfields starting from 1
-    const userBitfields = _modalBitfields.map((f, i) => ({...f, _id: i + 1}));
-
-    // Compute remaining bits for default bitfield
-    const usedBits = new Set();
-    userBitfields.forEach(f => { for (let b = f.bitStart; b <= f.bitEnd; b++) usedBits.add(b); });
-    const freeBits = [];
-    for (let b = 0; b < regSize; b++) { if (!usedBits.has(b)) freeBits.push(b); }
-
-    let finalBitfields = [...userBitfields];
-    if (freeBits.length > 0) {
-      // Shrink default bitfield to cover only free bits (highest contiguous range from MSB side)
-      const defEnd = freeBits[freeBits.length - 1];
-      const defStart = freeBits[0];
-      finalBitfields.push({ ...defaultBf, bitStart: defStart, bitEnd: defEnd });
+    // Build bitfields: if bfEnabled, use only user bitfields (no default); else use default covering whole register
+    let finalBitfields;
+    if (bfEnabled) {
+      finalBitfields = _modalBitfields.map((f, i) => ({...f, _id: i + 1, isDefault: false}));
+    } else {
+      // Default single bitfield covering the whole register
+      finalBitfields = [{
+        _id: 0,
+        name: baseName,
+        bitStart: 0,
+        bitEnd: regSize - 1,
+        access: defaultBfAccess,
+        isDefault: true,
+        reservedDefaultVal: defaultBfReservedVal
+      }];
     }
     finalBitfields.sort((a, b) => b.bitStart - a.bitStart);
 
@@ -1733,11 +1998,12 @@ function confirmAddRal() {
       baseName: baseName,
       type: 'register',
       regType, regSize, coreVal: instCoreVal, regAddr: instAddr, accessWidths,
+      internalAccess,
       resetVal,
       defaultBfAccess, defaultBfReservedVal,
       desc,
       bitfields: finalBitfields,
-      _nextBfId: userBitfields.length + 1,
+      _nextBfId: (bfEnabled ? _modalBitfields.length : 0) + 1,
       x: 48 + Math.random() * 320, y: 48 + idx * 80 + Math.random() * 40
     };
     S.nodes.push(n);
@@ -1749,7 +2015,7 @@ function confirmAddRal() {
   renderTree(); renderCanvas();
   if (addedIds.length === 1) select(addedIds[0]);
   updateStats();
-  const firstDisplayName = regType === 'INTERNAL' && coreVal !== null ? `${name}_${coreVal}` : name;
+  const firstDisplayName = enumEnabled ? `${name}0` : (regType === 'INTERNAL' && coreVal !== null ? `${name}_${coreVal}` : name);
   status(`"${firstDisplayName}"${enumEnabled ? ` ×${enumN}` : ''} added to RAL`);
 }
 
@@ -1803,13 +2069,8 @@ function renderCanvas() {
     let card = inner.querySelector(`[data-id="${n.id}"]`);
     if (!card) { card = makeCard(n); inner.appendChild(card); }
     card.style.left = n.x+'px'; card.style.top = n.y+'px';
-    // Snap height to grid multiple after layout
-    card.style.height = '';
-    requestAnimationFrame(() => {
-      const h = card.offsetHeight;
-      const snapped = Math.ceil(h / GRID) * GRID;
-      if (card.offsetHeight !== snapped) card.style.minHeight = snapped + 'px';
-    });
+    // Clear any previously forced height so content drives it, then snap once via CSS
+    card.style.minHeight = '';
     const isMal = n.layer==='mal';
     const mtClass = isMal
       ? (n.memType ? ' mt-' + n.memType : '')
@@ -1861,6 +2122,9 @@ function renderCanvas() {
         const regSize = n.regSize || 32;
         if (regType === 'INTERNAL' && n.coreVal !== undefined && n.coreVal !== null) {
           row('core', n.coreVal);
+        }
+        if (regType === 'INTERNAL' && n.internalAccess) {
+          row('access', n.internalAccess);
         }
         row('size', regSize + ' bit');
         if (regType === 'MMIO' && n.regAddr) {
@@ -2271,7 +2535,7 @@ function renderProps() {
 
   if (n.layer === 'mal') {
     body.innerHTML = `
-    <div class="prop-grp"><label class="prop-lbl">Segment ID <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-name" value="${n.name}" onblur="setProp('name',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-name-err')"/><span class="field-err" id="pp-name-err"></span></div>
+    <div class="prop-grp"><label class="prop-lbl">Segment ID <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-name" value="${n.name}" onblur="setProp('name',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');ppClearErr('pp-name-err')"/><span class="field-err" id="pp-name-err"></span></div>
     <div class="prop-grp"><label class="prop-lbl">Memory Type</label><select class="prop-sel" onchange="setProp('memType',this.value);renderProps()">${['RAM','ROM','FLASH','MMIO','RESERVED'].map(t=>`<option value="${t}"${t===n.memType?' selected':''}>${t==='MMIO'?'MMIO (Memory-Mapped IO)':t}</option>`).join('')}</select></div>
     <div class="prop-grp"><label class="prop-lbl">Start Address (hex) <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-addr" value="${n.segAddr||''}" placeholder="0x40020000" onblur="setProp('segAddr',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-addr-err')"/><span class="field-err" id="pp-addr-err"></span></div>
     <div class="prop-grp"><label class="prop-lbl">End Address</label><input class="prop-in" id="pp-end" value="${segEndAddr(n)}" disabled style="opacity:0.6"/></div>
@@ -2291,29 +2555,33 @@ function renderProps() {
   const regSize = n.regSize || 32;
   const isInternal = regType === 'INTERNAL';
   const bf = n.bitfields || [];
+  const bfUserOnly = bf.filter(f => !f.isDefault);
+  // A register "has bitfields enabled" if it has any user-defined (non-default) bitfields
+  const hasBfEnabled = bfUserOnly.length > 0;
   const BF_COLORS = ['#6b8aff','#4fc3f7','#66bb6a','#ffb74d','#ef5350','#ab47bc','#26c6da','#d4e157','#ff7043','#5c6bc0'];
   const bfColor = (f, i) => f.access === 'RO' ? '#ef5350' : f.access === 'RW' ? '#66bb6a' : f.access === 'WO' ? '#ffb74d' : '#9e9e9e';
+
+  function ppBfCoverageHtml(node) {
+    const rs = node.regSize || 32;
+    const usedBits = new Set();
+    (node.bitfields||[]).filter(f => !f.isDefault).forEach(f => { for (let b = f.bitStart; b <= f.bitEnd; b++) usedBits.add(b); });
+    const free = rs - usedBits.size;
+    if (free === 0) return `<div style="font-size:10px;color:var(--green);margin-top:4px">✓ All ${rs} bits covered</div>`;
+    return `<div style="font-size:10px;color:var(--amber);margin-top:4px">⚠ ${free} bit(s) not covered — gaps are not allowed when bitfields are enabled</div>`;
+  }
+
   let bfHtml = '';
-  bf.forEach((f, i) => {
-    const isDefault = !!f.isDefault;
+  bfUserOnly.forEach((f, i) => {
+    const isDefault = false;
     const color = bfColor(f, i);
-    const label = isDefault
-      ? `<span style="font-size:9px;color:var(--text3);margin-left:4px;font-style:italic">(default)</span>`
-      : '';
-    const delBtn = isDefault
-      ? `<span style="font-size:11px;color:var(--text3);padding:0 6px;opacity:0.4" title="Default bitfield cannot be deleted">🔒</span>`
-      : `<button onclick="removeBitfield(${f._id})" style="background:transparent;border:none;color:#ef535070;cursor:pointer;font-size:14px;padding:2px 5px;line-height:1;border-radius:3px;transition:color 0.1s,background 0.1s" onmouseover="this.style.color='#ef5350';this.style.background='#3a1515'" onmouseout="this.style.color='#ef535070';this.style.background='transparent'" title="Delete bitfield">🗑</button>`;
-    const accessEdit = isDefault
-      ? `<select style="background:var(--bg4);border:1px solid var(--border2);border-radius:3px;color:var(--text2);font-size:10px;padding:1px 3px;cursor:pointer" onchange="setDefaultBfAccess(this.value)">
-          ${['RW','RO','WO','RESERVED'].map(a=>`<option value="${a}"${a===f.access?' selected':''}>${a}</option>`).join('')}
-         </select>`
-      : `<select style="background:var(--bg4);border:1px solid var(--border2);border-radius:3px;color:var(--text2);font-size:10px;padding:1px 3px;cursor:pointer" onchange="setBitfieldAccess(${f._id},this.value)">
+    const label = '';
+    const delBtn = `<button onclick="removeBitfield(${f._id})" style="background:transparent;border:none;color:#ef535070;cursor:pointer;font-size:14px;padding:2px 5px;line-height:1;border-radius:3px;transition:color 0.1s,background 0.1s" onmouseover="this.style.color='#ef5350';this.style.background='#3a1515'" onmouseout="this.style.color='#ef535070';this.style.background='transparent'" title="Delete bitfield">🗑</button>`;
+    const accessEdit = `<select style="background:var(--bg4);border:1px solid var(--border2);border-radius:3px;color:var(--text2);font-size:10px;padding:1px 3px;cursor:pointer" onchange="setBitfieldAccess(${f._id},this.value)">
           ${['RW','RO','WO','RESERVED'].map(a=>`<option value="${a}"${a===f.access?' selected':''}>${a}</option>`).join('')}
          </select>`;
-    const nameField = isDefault
-      ? `<span style="font-size:11px;font-weight:600;color:${color};font-family:var(--font-code)">${f.name}</span>${label}`
-      : `<input value="${f.name}" style="background:transparent;border:none;border-bottom:1px solid ${color}40;color:${color};font-family:var(--font-code);font-size:11px;font-weight:600;padding:1px 2px;width:100%;outline:none;transition:border-color 0.15s"
+    const nameField = `<input value="${f.name}" style="background:transparent;border:none;border-bottom:1px solid ${color}40;color:${color};font-family:var(--font-code);font-size:11px;font-weight:600;padding:1px 2px;width:100%;outline:none;transition:border-color 0.15s"
            onfocus="this.style.borderBottomColor='${color}'"
+           oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')"
            onblur="renameBitfield(${f._id},this.value,this)"
            onkeydown="if(event.key==='Enter')this.blur()"
            title="Click to rename"/>`;
@@ -2321,16 +2589,16 @@ function renderProps() {
       <div style="flex:1;min-width:0;overflow:hidden">
         <div style="display:flex;align-items:center;gap:2px">${nameField}</div>
         <div style="display:flex;align-items:center;gap:6px;margin-top:2px">[${f.bitEnd}:${f.bitStart}] &nbsp;${accessEdit}</div>
-        ${isDefault && f.access === 'RESERVED' ? `<div style="font-size:10px;color:var(--text3);margin-top:1px">reset val: <span style="color:var(--text2)">${f.reservedDefaultVal||'0x00000000'}</span></div>` : ''}
       </div>
       ${delBtn}
     </div>`;
   });
 
   body.innerHTML = `
-    <div class="prop-grp"><label class="prop-lbl">Name <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-name" value="${n.name}" onblur="setProp('name',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-name-err')"/><span class="field-err" id="pp-name-err"></span></div>
+    <div class="prop-grp"><label class="prop-lbl">Name <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-name" value="${n.name}" onblur="setProp('name',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');ppClearErr('pp-name-err')"/><span class="field-err" id="pp-name-err"></span></div>
     <div class="prop-grp"><label class="prop-lbl">Register Type</label><input class="prop-in" value="${regType}" disabled/></div>
     ${isInternal ? `<div class="prop-grp"><label class="prop-lbl">Core</label><input class="prop-in" id="pp-core" value="${n.coreVal ?? 0}" type="number" min="0" onblur="setPropCore(this.value)" onkeydown="if(event.key==='Enter')this.blur()"/></div>` : ''}
+    ${isInternal ? `<div class="prop-grp"><label class="prop-lbl">Register Access</label><select class="prop-sel" onchange="setPropInternalAccess(this.value)"><option value="RW"${(n.internalAccess||'RW')==='RW'?' selected':''}>RW (Read/Write)</option><option value="RO"${(n.internalAccess||'RW')==='RO'?' selected':''}>RO (Read Only)</option></select></div>` : ''}
     <div class="prop-grp"><label class="prop-lbl">Size</label><input class="prop-in" value="${regSize} bit" disabled/></div>
     ${!isInternal && n.regAddr !== undefined ? `<div class="prop-grp"><label class="prop-lbl">Address <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-regaddr" value="${n.regAddr||''}" onblur="setProp('regAddr',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-regaddr-err')" placeholder="0x40000000"/><span class="field-err" id="pp-regaddr-err"></span></div>` : ''}
     ${!isInternal && n.accessWidths && n.accessWidths.length ? `<div class="prop-grp"><label class="prop-lbl">Access Widths</label><input class="prop-in" value="${n.accessWidths.map(w=>w+'b').join(', ')}" disabled/></div>` : ''}
@@ -2340,10 +2608,16 @@ function renderProps() {
 
     <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <span class="prop-lbl" style="margin:0">Bit Fields (${regSize}-bit)</span>
-        <button onclick="openAddBitfield()" style="background:var(--blue-soft);color:#fff;border:none;border-radius:3px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer">+ Add field</button>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="pp-bf-chk" ${hasBfEnabled ? 'checked' : ''} onchange="ppToggleBitfields()" style="width:13px;height:13px;accent-color:var(--blue);cursor:pointer"/>
+          <span class="prop-lbl" style="margin:0">Bit Fields (${regSize}-bit)</span>
+        </label>
+        ${hasBfEnabled ? `<button onclick="ppEditBitfields()" type="button" style="background:var(--bg3);border:1px solid var(--border2);border-radius:3px;color:var(--text2);font-size:11px;padding:3px 8px;cursor:pointer">Edit…</button>` : ''}
       </div>
-      ${bf.length === 0 ? `<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px 0">No bitfields defined</div>` : bfHtml}
+      <div id="pp-bf-list" style="display:${hasBfEnabled ? '' : 'none'}">
+        ${hasBfEnabled ? (bfUserOnly.length === 0 ? `<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px 0">No custom bitfields — add fields to cover all ${regSize} bits</div>` : bfHtml) : ''}
+        ${hasBfEnabled ? ppBfCoverageHtml(n) : ''}
+      </div>
     </div>`;
 }
 
@@ -2496,6 +2770,61 @@ function setDefaultBfAccess(access) {
   renderProps(); renderCanvas();
 }
 
+function setPropInternalAccess(access) {
+  const n = S.nodes.find(n => n.id === S.selected);
+  if (!n || n.regType !== 'INTERNAL') return;
+  n.internalAccess = access;
+  renderCanvas();
+  status(`Access set to ${access}`);
+}
+
+function ppEditBitfields() {
+  const n = S.nodes.find(n => n.id === S.selected);
+  if (!n) return;
+  openBfEditorForNode(n);
+}
+
+function ppToggleBitfields() {
+  const n = S.nodes.find(n => n.id === S.selected);
+  if (!n) return;
+  const checked = document.getElementById('pp-bf-chk').checked;
+
+  if (!checked) {
+    // Unchecking: if there are user-defined bitfields, ask for confirmation
+    const userBfs = (n.bitfields||[]).filter(f => !f.isDefault);
+    if (userBfs.length > 0) {
+      // Revert checkbox visually until confirmed
+      document.getElementById('pp-bf-chk').checked = true;
+      _confirmDeleteId = null; _confirmDeleteIds = null;
+      _confirmCallback = () => {
+        // Remove all user bitfields, rebuild default
+        n.bitfields = [];
+        rebuildDefaultBf(n);
+        n.bitfields.sort((a,b) => b.bitStart - a.bitStart);
+        renderTree(); renderCanvas(); renderProps();
+        status('Bitfields disabled');
+      };
+      document.getElementById('confirm-msg').textContent =
+        `This will permanently delete all ${userBfs.length} bitfield(s) defined on "${n.name}". Continue?`;
+      const okBtn = document.getElementById('confirm-ok-btn');
+      okBtn.textContent = 'Delete All'; okBtn.style.background = 'var(--red)';
+      document.querySelector('#modal-confirm .mhdr span').textContent = '⚠ Remove Bitfields';
+      document.querySelector('#modal-confirm .mhdr').style.color = '';
+      document.getElementById('modal-confirm').classList.add('open');
+      return;
+    }
+    // No user bitfields — just rebuild default
+    n.bitfields = [];
+    rebuildDefaultBf(n);
+    n.bitfields.sort((a,b) => b.bitStart - a.bitStart);
+    renderTree(); renderCanvas(); renderProps();
+    return;
+  }
+
+  // Checking: open the bf editor popup seeded with this node's current user bitfields
+  openBfEditorForNode(n);
+}
+
 function setBitfieldAccess(bfId, access) {
   const n = S.nodes.find(n => n.id === S.selected);
   if (!n) return;
@@ -2573,8 +2902,9 @@ function setProp(k, v) {
   if (k === 'name') {
     ppClearErr('pp-name-err');
     const newName = v.trim();
-    if (!newName) {
-      ppSetErr('pp-name-err', 'Name is required');
+    const nameErr = validateIdentifier(newName, 'Name');
+    if (nameErr) {
+      ppSetErr('pp-name-err', nameErr);
       document.getElementById('pp-name').value = n.name; return;
     }
     // For INTERNAL registers, name includes the core suffix — update baseName too
@@ -2616,9 +2946,9 @@ function setProp(k, v) {
     }
     const addr = parseHex(v.trim()), size = Number(n.segSize);
     if (size > 0) {
-      const ov = checkSegmentOverlap(addr, size, n.id);
+      const ov = checkAddressOverlap(addr, size, n.id);
       if (ov) {
-        ppSetErr('pp-addr-err', `Overlaps with "${ov.name}" [${ov.segAddr}, +${ov.segSize}B]`);
+        ppSetErr('pp-addr-err', `Overlaps with ${ov.label}`);
         document.getElementById('pp-addr').value = n.segAddr || ''; return;
       }
     }
@@ -2643,9 +2973,9 @@ function setProp(k, v) {
     }
     const addr = parseHex(n.segAddr);
     if (!isNaN(addr) && parsed > 0) {
-      const ov = checkSegmentOverlap(addr, parsed, n.id);
+      const ov = checkAddressOverlap(addr, parsed, n.id);
       if (ov) {
-        ppSetErr('pp-size-err', `Overlaps with "${ov.name}" [${ov.segAddr}, +${ov.segSize}B]`);
+        ppSetErr('pp-size-err', `Overlaps with ${ov.label}`);
         document.getElementById('pp-size').value = n.segSize ?? ''; return;
       }
     }
@@ -2664,6 +2994,13 @@ function setProp(k, v) {
     }
     if (isNaN(parseHex(v.trim()))) {
       ppSetErr('pp-regaddr-err', 'Invalid hex address');
+      document.getElementById('pp-regaddr').value = n.regAddr || ''; return;
+    }
+    const addr = parseHex(v.trim());
+    const size = (n.regSize || 32) / 8;
+    const ov = checkAddressOverlap(addr, size, n.id);
+    if (ov) {
+      ppSetErr('pp-regaddr-err', `Overlaps with ${ov.label}`);
       document.getElementById('pp-regaddr').value = n.regAddr || ''; return;
     }
     n.regAddr = v.trim();
@@ -2775,24 +3112,38 @@ function importProject() {
         }
       });
 
-      // ── Address/size overlap (MAL only) ──
-      incomingMal.forEach(imp => {
-        const impAddr = parseHex(imp.segAddr);
-        const impSize = Number(imp.segSize);
-        if (isNaN(impAddr) || impSize <= 0) return;
-        existingMal.forEach(ex => {
-          const exAddr = parseHex(ex.segAddr);
-          const exSize = Number(ex.segSize);
-          if (!isNaN(exAddr) && exSize > 0 && segmentsOverlap(impAddr, impSize, exAddr, exSize)) {
-            conflicts.push(`Address overlap: "${imp.name}" [${imp.segAddr}+${toHex(impSize)}] overlaps "${ex.name}" [${ex.segAddr}+${toHex(exSize)}]`);
+      // ── Address/size overlap: MAL segments AND RAL MMIO registers ──
+      // Helper: get address range for any node
+      function nodeAddrRange(n) {
+        if (n.layer === 'mal') {
+          const a = parseHex(n.segAddr), s = Number(n.segSize);
+          return (!isNaN(a) && s > 0) ? { addr: a, size: s } : null;
+        }
+        if (n.layer === 'ral' && n.regType === 'MMIO' && n.regAddr) {
+          const a = parseHex(n.regAddr), s = (n.regSize || 32) / 8;
+          return (!isNaN(a) && s > 0) ? { addr: a, size: s } : null;
+        }
+        return null;
+      }
+
+      const incomingAddressable = incoming.filter(n => nodeAddrRange(n));
+
+      incomingAddressable.forEach(imp => {
+        const ir = nodeAddrRange(imp);
+        // vs existing nodes
+        S.nodes.forEach(ex => {
+          const er = nodeAddrRange(ex);
+          if (!er) return;
+          if (segmentsOverlap(ir.addr, ir.size, er.addr, er.size)) {
+            conflicts.push(`Address overlap: "${imp.name}" overlaps existing "${ex.name}"`);
           }
         });
-        // Also check incoming vs incoming
-        incomingMal.forEach(other => {
+        // vs other incoming nodes
+        incomingAddressable.forEach(other => {
           if (other === imp) return;
-          const oAddr = parseHex(other.segAddr);
-          const oSize = Number(other.segSize);
-          if (!isNaN(oAddr) && oSize > 0 && segmentsOverlap(impAddr, impSize, oAddr, oSize)) {
+          const or = nodeAddrRange(other);
+          if (!or) return;
+          if (segmentsOverlap(ir.addr, ir.size, or.addr, or.size)) {
             const key = [imp.name, other.name].sort().join('|');
             const msg = `Address overlap in import: "${imp.name}" overlaps "${other.name}"`;
             if (!conflicts.includes(msg)) conflicts.push(msg);
@@ -3355,7 +3706,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-['modal-mal','modal-ral','modal-export','modal-edit-mal','modal-edit-ral','modal-confirm','modal-save'].forEach(id => {
+['modal-mal','modal-ral','modal-export','modal-edit-mal','modal-edit-ral','modal-confirm','modal-save','modal-bf-editor'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('click', e => { if(e.target===e.currentTarget) closeModal(id); });
   });
