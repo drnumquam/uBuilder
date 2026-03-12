@@ -425,6 +425,14 @@ body {
   transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
 .card-del-btn:hover { background: #3a1515; color: var(--red); border-color: #ef535050; }
+.card-rot-btn {
+  flex-shrink: 0;
+  background: transparent; border: 1px solid transparent;
+  border-radius: 3px; color: var(--text3); font-size: 13px;
+  cursor: pointer; padding: 2px 5px; line-height: 1;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.card-rot-btn:hover { background: var(--bg4); color: var(--blue); border-color: var(--border2); }
 .ch.mal { background: #252a45; }
 .ch.ral { background: #1e2d3a; }
 .ctitle { font-size: 12px; font-weight: 600; font-family: var(--font-code); flex: 1; }
@@ -537,6 +545,10 @@ body {
   <div class="h-group">
     <button class="tb" onclick="exportYAML()">Export to</button>
     <button class="tb" onclick="importYAML()">Import from</button>
+  </div>
+  <div class="h-sep"></div>
+  <div class="h-group">
+    <button class="tb" onclick="openFindPopup()" title="Find node by ID (supports * wildcard)">🔍 Find</button>
   </div>
   <div class="h-sep"></div>
   <span class="h-label">Generate</span>
@@ -929,14 +941,56 @@ function status(msg, type='') {
 /* ── Zoom ── */
 const ZOOM_MIN = 0.25, ZOOM_MAX = 2.0, ZOOM_STEP = 0.1;
 
+// Logical canvas size (px at zoom=1). Grows but never shrinks below the minimum.
+const CANVAS_MIN_W = 2400, CANVAS_MIN_H = 1800, CANVAS_STEP = 400;
+S.canvasW = CANVAS_MIN_W; S.canvasH = CANVAS_MIN_H;
+
 function applyZoom() {
   const czoom = document.getElementById('czoom');
   const lbl   = document.getElementById('zoom-lbl');
   if (!czoom) return;
   czoom.style.transform = `scale(${S.zoom})`;
-  czoom.style.width  = (2400 * S.zoom) + 'px';
-  czoom.style.height = (1800 * S.zoom) + 'px';
+  czoom.style.width  = (S.canvasW * S.zoom) + 'px';
+  czoom.style.height = (S.canvasH * S.zoom) + 'px';
+  const cinner = document.getElementById('cinner');
+  if (cinner) { cinner.style.width = S.canvasW + 'px'; cinner.style.height = S.canvasH + 'px'; }
   if (lbl) lbl.textContent = Math.round(S.zoom * 100) + '%';
+}
+
+/**
+ * Returns the axis-aligned bounding box of a node on the canvas,
+ * taking its CSS rotation into account.
+ * n.x / n.y are the top-left of the UNROTATED element.
+ * w / h are the unrotated dimensions (read from the DOM or estimated).
+ */
+function getNodeAABB(n) {
+  const el = document.querySelector(`[data-id="${n.id}"]`);
+  const w = n._uw || (el ? el.offsetWidth  : 224);
+  const h = n._uh || (el ? el.offsetHeight : 120);
+  const rot = ((n.rotation || 0) * Math.PI) / 180;
+  const cx = n.x + w / 2, cy = n.y + h / 2;
+  const cos = Math.abs(Math.cos(rot)), sin = Math.abs(Math.sin(rot));
+  const aw = w * cos + h * sin;
+  const ah = w * sin + h * cos;
+  return { x: cx - aw / 2, y: cy - ah / 2, r: cx + aw / 2, b: cy + ah / 2 };
+}
+
+function expandCanvasIfNeeded() {
+  if (!S.nodes.length) return;
+  let maxR = CANVAS_MIN_W, maxB = CANVAS_MIN_H;
+  const PAD = CANVAS_STEP / 2;
+  S.nodes.forEach(n => {
+    const bb = getNodeAABB(n);
+    if (bb.r + PAD > maxR) maxR = bb.r + PAD;
+    if (bb.b + PAD > maxB) maxB = bb.b + PAD;
+  });
+  // Round up to nearest CANVAS_STEP
+  const newW = Math.max(S.canvasW, Math.ceil(maxR / CANVAS_STEP) * CANVAS_STEP);
+  const newH = Math.max(S.canvasH, Math.ceil(maxB / CANVAS_STEP) * CANVAS_STEP);
+  if (newW !== S.canvasW || newH !== S.canvasH) {
+    S.canvasW = newW; S.canvasH = newH;
+    applyZoom();
+  }
 }
 
 function zoomBy(delta) {
@@ -1226,6 +1280,123 @@ function closeModal(id) {
   ['modal-mal','modal-ral','modal-save','modal-edit-mal','modal-edit-ral','modal-bf-editor'].forEach(mid => {
     const el = document.getElementById(mid);
     if (el) el.classList.remove('open');
+  });
+}
+
+/* ── Find popup ── */
+function openFindPopup() {
+  document.getElementById('find-input').value = '';
+  document.getElementById('find-results').innerHTML = '';
+  document.getElementById('find-status').textContent = '';
+  document.getElementById('modal-find').classList.add('open');
+  setTimeout(() => document.getElementById('find-input').focus(), 80);
+}
+
+function closeFindPopup() {
+  document.getElementById('modal-find').classList.remove('open');
+}
+
+function wildcardToRegex(pattern) {
+  // Escape regex special chars except *, then replace * with .*
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  return new RegExp('^' + escaped + '$', 'i');
+}
+
+function runFind() {
+  const raw = document.getElementById('find-input').value.trim();
+  const resultsEl = document.getElementById('find-results');
+  const statusEl  = document.getElementById('find-status');
+  resultsEl.innerHTML = '';
+  statusEl.textContent = '';
+
+  if (!raw) { statusEl.textContent = 'Type a name or pattern to search.'; return; }
+
+  const re = wildcardToRegex(raw);
+  const matches = S.nodes.filter(n => re.test(n.name));
+
+  if (!matches.length) {
+    statusEl.textContent = `No results for "${raw}".`;
+    return;
+  }
+  statusEl.textContent = `${matches.length} result${matches.length > 1 ? 's' : ''} found.`;
+
+  matches.forEach(n => {
+    const isMal = n.layer === 'mal';
+    const typeLabel = isMal ? (n.memType || 'MAL') : (n.regType || 'RAL');
+    const typeColor = isMal
+      ? ({ RAM:'#ffd600', ROM:'#ef5350', FLASH:'#ff40c0', MMIO:'#2e7d32', RESERVED:'#9e9e9e' }[n.memType] || 'var(--blue)')
+      : (n.regType === 'INTERNAL' ? 'var(--blue)' : '#a5d6a7');
+
+    const row = document.createElement('div');
+    row.style.cssText = `display:flex;align-items:center;gap:8px;padding:6px 10px;
+      background:var(--bg3);border-radius:4px;border-left:3px solid ${typeColor};
+      cursor:pointer;transition:background 0.1s`;
+    row.onmouseenter = () => row.style.background = 'var(--bg4)';
+    row.onmouseleave = () => row.style.background = 'var(--bg3)';
+    row.innerHTML = `
+      <span style="font-family:var(--font-code);font-size:12px;font-weight:600;color:${typeColor};flex:1">${n.name}</span>
+      <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--bg0);color:var(--text3);font-family:var(--font-code)">${typeLabel}</span>
+      <span style="font-size:10px;color:var(--text3)">${isMal ? (n.segAddr||'') : (n.regAddr||'')}</span>`;
+    row.addEventListener('click', () => findSelectNode(n.id));
+    resultsEl.appendChild(row);
+  });
+}
+
+function findSelectNode(nodeId) {
+  closeFindPopup();
+
+  // Select the node
+  select(nodeId);
+
+  // Expand the correct section in the project tree
+  const n = S.nodes.find(x => x.id === nodeId);
+  if (!n) return;
+
+  if (n.layer === 'mal') {
+    // Open the MAL section
+    const malHdr = document.querySelector('.tree-sec-hdr.mal');
+    const malItems = document.getElementById('mal-items');
+    if (malHdr && !malHdr.classList.contains('open')) {
+      malHdr.classList.add('open');
+      malItems && malItems.classList.add('open');
+    }
+    // Open the memory-type sub-group
+    const grpId = 'tree-grp-' + (n.memType || 'RAM');
+    const grpEl  = document.getElementById(grpId);
+    const grpHdr = grpEl && grpEl.previousElementSibling;
+    if (grpEl && !grpEl.classList.contains('open')) {
+      grpEl.classList.add('open');
+      grpHdr && grpHdr.classList.add('open');
+    }
+  } else {
+    // Open the RAL section
+    const ralHdr = document.querySelector('.tree-sec-hdr.ral');
+    const ralItems = document.getElementById('ral-items');
+    if (ralHdr && !ralHdr.classList.contains('open')) {
+      ralHdr.classList.add('open');
+      ralItems && ralItems.classList.add('open');
+    }
+  }
+
+  // Re-render tree so the item appears highlighted
+  renderTree();
+
+  // Centre the canvas on the card — defer so renderCanvas has painted first
+  requestAnimationFrame(() => {
+    const card = document.querySelector(`[data-id="${nodeId}"]`);
+    const sc   = document.getElementById('cscroll');
+    if (!card || !sc) return;
+
+    // card position in canvas coords
+    const nn = S.nodes.find(x => x.id === nodeId);
+    if (!nn) return;
+    const uw = nn._uw || card.offsetWidth;
+    const uh = nn._uh || card.offsetHeight;
+    const cardCX = (nn.x + uw / 2) * S.zoom;
+    const cardCY = (nn.y + uh / 2) * S.zoom;
+
+    sc.scrollLeft = cardCX - sc.clientWidth  / 2;
+    sc.scrollTop  = cardCY - sc.clientHeight / 2;
   });
 }
 
@@ -1590,13 +1761,16 @@ function confirmBfEditor() {
 }
 function openBfEditorForNode(n) {
   const regSize = n.regSize || 32;
-  // Seed _modalBitfields from node's existing user bitfields
-  _modalBitfields = (n.bitfields||[])
+  // Seed _modalBitfields from node's existing user bitfields.
+  // Re-assign _id in ascending bitStart order (fields are always added LSB→MSB),
+  // so the field with the highest _id is always the "last inserted" one and
+  // the delete button appears only on that field — consistent with create-mode behaviour.
+  const userFields = (n.bitfields||[])
     .filter(f => !f.isDefault)
-    .map(f => ({...f}));
+    .sort((a, b) => a.bitStart - b.bitStart);   // ascending bitStart = insertion order
+  _modalBitfields = userFields.map((f, i) => ({...f, _id: i + 1}));
 
   // Override regSize lookup for updateBfEditorState to use node's size
-  // We temporarily store it on a hidden input (reuse ral-size if available, else use data attr)
   const sizeProxy = document.getElementById('ral-size');
   const prevSize = sizeProxy ? sizeProxy.value : '32';
   if (sizeProxy) sizeProxy.value = String(regSize);
@@ -1605,8 +1779,6 @@ function openBfEditorForNode(n) {
   updateBfEditorState();
   document.getElementById('modal-bf-editor').classList.add('open');
 
-  // When the popup's OK is confirmed, save back to the node
-  // We replace confirmBfEditor temporarily via a flag
   _bfEditorNodeTarget = n;
   if (sizeProxy) sizeProxy.dataset.prevSize = prevSize;
 }
@@ -1619,20 +1791,37 @@ function renderBfEditorList() {
   list.innerHTML = '';
   const bfColor = f => f.access === 'RO' ? '#ef5350' : f.access === 'RW' ? '#66bb6a' : f.access === 'WO' ? '#ffb74d' : '#9e9e9e';
   const sorted = [..._modalBitfields].sort((a, b) => b.bitStart - a.bitStart);
+  // Only the last-added bitfield (highest _id) can be deleted or renamed
+  const maxId = _modalBitfields.length > 0 ? Math.max(..._modalBitfields.map(f => f._id)) : -Infinity;
   sorted.forEach(f => {
     const color = bfColor(f);
+    const isLast = f._id === maxId;
     const row = document.createElement('div');
-    row.style.cssText = `display:flex;gap:4px;align-items:center;padding:4px 8px;background:var(--bg3);border-radius:3px;border-left:3px solid ${color}`;
+    row.style.cssText = `display:flex;gap:4px;align-items:center;padding:4px 8px;background:var(--bg3);border-radius:3px;border-left:3px solid ${color};margin-bottom:2px`;
+    // Access select for editing
+    const accessOpts = ['RW','RO','WO','RESERVED'].map(a =>
+      `<option value="${a}"${a===f.access?' selected':''}>${a}</option>`).join('');
+
+    const nameField = `<input value="${f.name}"
+           style="background:transparent;border:none;border-bottom:1px solid ${color}60;color:${color};font-family:var(--font-code);font-size:11px;font-weight:600;padding:1px 2px;width:90px;outline:none;transition:border-color 0.15s"
+           onfocus="this.style.borderBottomColor='${color}'"
+           oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')"
+           onblur="bfEditorRenameLast(${f._id},this.value,this)"
+           onkeydown="if(event.key==='Enter')this.blur()"
+           title="Click to rename"/>`;
+
     row.innerHTML = `
-      <div style="flex:1;min-width:0">
-        <span style="font-size:11px;font-weight:600;color:${color};font-family:var(--font-code)">${f.name}</span>
-        <span style="font-size:10px;color:var(--text3);margin-left:6px">[${f.bitEnd}:${f.bitStart}] ${f.access}</span>
+      <div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        ${nameField}
+        <span style="font-size:10px;color:var(--text3)">[${f.bitEnd}:${f.bitStart}]</span>
+        <select style="background:var(--bg4);border:1px solid var(--border2);border-radius:3px;color:var(--text2);font-size:10px;padding:1px 3px;cursor:pointer" onchange="bfEditorSetAccess(${f._id},this.value)">${accessOpts}</select>
       </div>
-      <button onclick="bfEditorRemove(${f._id})" type="button"
-        style="background:transparent;border:none;color:#ef535060;cursor:pointer;font-size:14px;padding:2px 4px;line-height:1;border-radius:3px"
+      ${isLast ? `<button type="button"
+        onclick="bfEditorConfirmRemove(${f._id},'${f.name}')"
+        style="background:transparent;border:none;color:#ef535060;cursor:pointer;font-size:14px;padding:2px 4px;line-height:1;border-radius:3px;flex-shrink:0"
         onmouseover="this.style.color='#ef5350';this.style.background='#3a1515'"
         onmouseout="this.style.color='#ef535060';this.style.background='transparent'"
-        title="Remove">🗑</button>`;
+        title="Remove last bitfield">🗑</button>` : `<span style="width:26px;flex-shrink:0;display:inline-block"></span>`}`;
     list.appendChild(row);
   });
 }
@@ -1676,6 +1865,52 @@ function bfEditorRemove(bfId) {
   updateBfEditorState();
 }
 
+function bfEditorConfirmRemove(bfId, bfName) {
+  // Save bf-editor modal state and show confirm dialog on top
+  _confirmDeleteId  = null;
+  _confirmDeleteIds = null;
+  _confirmCallback  = () => {
+    bfEditorRemove(bfId);
+  };
+  document.getElementById('confirm-msg').textContent =
+    `Delete bitfield "${bfName}"? This cannot be undone.`;
+  const okBtn = document.getElementById('confirm-ok-btn');
+  okBtn.textContent = 'Delete'; okBtn.style.background = 'var(--red)';
+  document.querySelector('#modal-confirm .mhdr span').textContent = '⚠ Confirm Delete';
+  document.querySelector('#modal-confirm .mhdr').style.color = '';
+  document.getElementById('modal-confirm').classList.add('open');
+}
+
+function bfEditorRenameLast(bfId, newName, inputEl) {
+  const f = _modalBitfields.find(f => f._id === bfId);
+  if (!f) return;
+  newName = newName.trim();
+  if (!newName) { inputEl.value = f.name; return; }
+  if (!/^[A-Z][A-Z0-9_]*$/.test(newName)) {
+    inputEl.style.borderBottomColor = 'var(--red)';
+    inputEl.title = 'Must start with a letter, A–Z 0–9 _';
+    inputEl.value = f.name;
+    return;
+  }
+  const regBaseName = (document.getElementById('ral-name') || {}).value || '';
+  const clash = _modalBitfields.some(x => x._id !== bfId && x.name === newName);
+  const clashBase = newName === regBaseName.trim();
+  if (clash || clashBase) {
+    inputEl.style.borderBottomColor = 'var(--red)';
+    inputEl.title = `"${newName}" already exists`;
+    inputEl.value = f.name;
+    return;
+  }
+  f.name = newName;
+  renderBfEditorList();
+  updateBfEditorState();
+}
+
+function bfEditorSetAccess(bfId, access) {
+  const f = _modalBitfields.find(f => f._id === bfId);
+  if (f) { f.access = access; renderBfEditorList(); updateBfEditorState(); }
+}
+
 function bfEditorAddField() {
   const regSize = parseInt(document.getElementById('ral-size').value) || 32;
   const usedBits = new Set();
@@ -1690,16 +1925,35 @@ function bfEditorAddField() {
     const bfSize   = parseInt(document.getElementById('bf-size').value);
     const bfAccess = document.getElementById('bf-access').value;
     const errEl    = document.getElementById('bf-err');
+    const nameErrEl = document.getElementById('bf-name-err');
     const bfEnd    = nextStart + bfSize - 1;
 
-    if (!bfName) { errEl.textContent = 'Name is required'; _confirmCallback = null; bfEditorAddField(); return; }
-    if (!/^[A-Z][A-Z0-9_]*$/.test(bfName)) { errEl.textContent = 'Must start with a letter, A–Z 0–9 _'; _confirmCallback = null; bfEditorAddField(); return; }
+    if (nameErrEl) nameErrEl.textContent = '';
+    if (errEl) errEl.textContent = '';
+
+    if (!bfName) {
+      if (nameErrEl) nameErrEl.textContent = 'Name is required';
+      else if (errEl) errEl.textContent = 'Name is required';
+      _confirmCallback = arguments.callee;
+      return;
+    }
+    if (!/^[A-Z][A-Z0-9_]*$/.test(bfName)) {
+      if (nameErrEl) nameErrEl.textContent = 'Must start with a letter, A–Z 0–9 _';
+      else if (errEl) errEl.textContent = 'Must start with a letter, A–Z 0–9 _';
+      _confirmCallback = arguments.callee;
+      return;
+    }
     const regBaseName = document.getElementById('ral-name').value.trim();
     if (_modalBitfields.some(f => f.name === bfName) || bfName === regBaseName) {
-      errEl.textContent = `"${bfName}" already exists`; _confirmCallback = null; bfEditorAddField(); return;
+      if (nameErrEl) nameErrEl.textContent = `"${bfName}" already exists`;
+      else if (errEl) errEl.textContent = `"${bfName}" already exists`;
+      _confirmCallback = arguments.callee;
+      return;
     }
     if (isNaN(bfSize) || bfSize < 1 || bfSize > maxSize) {
-      errEl.textContent = `Size must be 1–${maxSize} bit(s)`; _confirmCallback = null; bfEditorAddField(); return;
+      if (errEl) errEl.textContent = `Size must be 1–${maxSize} bit(s)`;
+      _confirmCallback = arguments.callee;
+      return;
     }
     _modalBitfields.push({ _id: _modalBitfields.length + 1, name: bfName, bitStart: nextStart, bitEnd: bfEnd, access: bfAccess });
     _modalBitfields.sort((a, b) => b.bitStart - a.bitStart);
@@ -1710,7 +1964,8 @@ function bfEditorAddField() {
   document.getElementById('confirm-msg').innerHTML = `
     <div style="display:flex;flex-direction:column;gap:8px">
       <div class="prop-grp"><label class="prop-lbl">Field Name (A–Z, 0–9, _)</label>
-        <input class="prop-in" id="bf-name" placeholder="e.g. EN, MODE" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')"/></div>
+        <input class="prop-in" id="bf-name" placeholder="e.g. EN, MODE" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');document.getElementById('bf-name-err').textContent=''"/>
+        <span class="field-err" id="bf-name-err"></span></div>
       <div style="display:flex;gap:8px">
         <div class="prop-grp" style="flex:1"><label class="prop-lbl">Bit Start (fixed)</label>
           <input class="prop-in" id="bf-start-display" value="${nextStart}" disabled style="opacity:0.5"/></div>
@@ -2069,6 +2324,9 @@ function renderCanvas() {
     let card = inner.querySelector(`[data-id="${n.id}"]`);
     if (!card) { card = makeCard(n); inner.appendChild(card); }
     card.style.left = n.x+'px'; card.style.top = n.y+'px';
+    // Apply rotation
+    card.style.transform = n.rotation ? `rotate(${n.rotation}deg)` : '';
+    card.style.transformOrigin = '50% 50%';
     // Clear any previously forced height so content drives it, then snap once via CSS
     card.style.minHeight = '';
     const isMal = n.layer==='mal';
@@ -2122,9 +2380,6 @@ function renderCanvas() {
         const regSize = n.regSize || 32;
         if (regType === 'INTERNAL' && n.coreVal !== undefined && n.coreVal !== null) {
           row('core', n.coreVal);
-        }
-        if (regType === 'INTERNAL' && n.internalAccess) {
-          row('access', n.internalAccess);
         }
         row('size', regSize + ' bit');
         if (regType === 'MMIO' && n.regAddr) {
@@ -2193,7 +2448,11 @@ function renderCanvas() {
               if (isDefaultBf) seg.style.opacity = '0.55';
               seg.title = `${bf.name} [${bitHigh}:${bitLow}] ${bf.access} — ${segBits}b`;
               const label = document.createElement('span');
-              label.textContent = bf.name;
+              // For INTERNAL registers, append _coreVal to the label text
+              const labelText = (n.regType === 'INTERNAL' && n.coreVal !== undefined && n.coreVal !== null)
+                ? `${bf.name}_${n.coreVal}`
+                : bf.name;
+              label.textContent = labelText;
               label.style.cssText =
                 `writing-mode:vertical-lr;transform:rotate(180deg);` +
                 `font-family:var(--font-code);font-size:9px;font-weight:800;` +
@@ -2266,7 +2525,53 @@ function makeCard(n) {
   const isMal = n.layer==='mal';
   const hdr = document.createElement('div');
   hdr.className = `ch ${n.layer}${n.memType ? ' mt-' + n.memType : ''}${n.layer === 'ral' ? (n.regType === 'INTERNAL' ? ' mt-INTERNAL' : ' ral-mmio-reg') : ''}`;
-  hdr.innerHTML = `<span class="ctitle"></span><span class="cbadge"></span><button class="card-del-btn" title="Delete">🗑</button>`;
+  hdr.innerHTML = `<span class="ctitle"></span><span class="cbadge"></span><button class="card-rot-btn" title="Rotate 90°">↻</button><button class="card-del-btn" title="Delete">🗑</button>`;
+
+  // Rotate button
+  const rotBtn = hdr.querySelector('.card-rot-btn');
+  rotBtn.addEventListener('mousedown', e => e.stopPropagation());
+  rotBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const idsToRotate = (S.multiSel.has(n.id) && S.multiSel.size > 1)
+      ? [...S.multiSel]
+      : [n.id];
+    idsToRotate.forEach(rid => {
+      const rn = S.nodes.find(x => x.id === rid);
+      if (!rn) return;
+      const el = document.querySelector(`[data-id="${rid}"]`);
+
+      // Store unrotated dimensions on first rotation so they stay stable
+      // regardless of how many times we toggle (CSS transform never changes offsetWidth/Height)
+      if (!rn._uw || !rn._uh) {
+        rn._uw = el ? el.offsetWidth  : 224;
+        rn._uh = el ? el.offsetHeight : 120;
+      }
+      const uw = rn._uw;  // unrotated width
+      const uh = rn._uh;  // unrotated height
+
+      // Center of the card in canvas space BEFORE this rotation
+      const cx = rn.x + uw / 2;
+      const cy = rn.y + uh / 2;
+
+      // Toggle: 0° → 90° → 0° → …  (only two positions)
+      const cur = rn.rotation || 0;
+      rn.rotation = cur === 0 ? 90 : 0;
+
+      // After toggling, the visual footprint swaps w↔h when rotated 90°.
+      // Reposition top-left so the center pixel stays fixed.
+      // At 0°:  visual size = uw × uh  → top-left = cx - uw/2, cy - uh/2
+      // At 90°: visual size = uh × uw  → top-left = cx - uh/2, cy - uw/2
+      if (rn.rotation === 90) {
+        rn.x = Math.max(0, Math.round((cx - uh / 2) / GRID) * GRID);
+        rn.y = Math.max(0, Math.round((cy - uw / 2) / GRID) * GRID);
+      } else {
+        rn.x = Math.max(0, Math.round((cx - uw / 2) / GRID) * GRID);
+        rn.y = Math.max(0, Math.round((cy - uh / 2) / GRID) * GRID);
+      }
+    });
+    renderCanvas();
+    expandCanvasIfNeeded();
+  });
 
   // Delete button — stop propagation so it doesn't trigger drag/select
   const delBtn = hdr.querySelector('.card-del-btn');
@@ -2295,11 +2600,17 @@ function makeCard(n) {
     // Ensure node is selected
     if (S.selected !== n.id && !S.multiSel.has(n.id)) select(n.id);
 
-    // Start drag
-    const r = card.getBoundingClientRect();
+    // Start drag — compute offset in canvas coords from node's stored top-left.
+    // We do NOT use card.getBoundingClientRect() because for rotated cards the
+    // reported rect is the axis-aligned bounding box of the rotated element,
+    // whose top-left is NOT n.x/n.y and would produce wrong drag offsets.
+    const sc2 = document.getElementById('cscroll');
+    const sr2 = sc2.getBoundingClientRect();
+    const mouseCanvasX = (e.clientX - sr2.left + sc2.scrollLeft) / S.zoom;
+    const mouseCanvasY = (e.clientY - sr2.top  + sc2.scrollTop)  / S.zoom;
     S.drag   = n;
-    S.dragOX = (e.clientX - r.left) / S.zoom;
-    S.dragOY = (e.clientY - r.top)  / S.zoom;
+    S.dragOX = mouseCanvasX - n.x;
+    S.dragOY = mouseCanvasY - n.y;
 
     if (S.multiSel.has(n.id)) {
       S.dragOffsets = [];
@@ -2315,47 +2626,66 @@ function makeCard(n) {
   return card;
 }
 
+/**
+ * Returns the axis-aligned bounding box {x, y, w, h} of node n,
+ * accounting for its CSS rotation. n.x/n.y are the unrotated top-left.
+ * Optionally override the position (used during drag simulation).
+ */
+function getCardAABB(n, overrideX, overrideY) {
+  const el = document.querySelector(`[data-id="${n.id}"]`);
+  // Use stored unrotated dimensions when available (set on first rotation).
+  // CSS transform never changes offsetWidth/offsetHeight, but after multiple
+  // rotations n._uw/_uh are always the true unrotated size.
+  const uw = n._uw || (el ? el.offsetWidth  : 224);
+  const uh = n._uh || (el ? el.offsetHeight : 120);
+  const px = (overrideX !== undefined) ? overrideX : n.x;
+  const py = (overrideY !== undefined) ? overrideY : n.y;
+  const rot = ((n.rotation || 0) * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(rot));
+  const sin = Math.abs(Math.sin(rot));
+  const aw = uw * cos + uh * sin;
+  const ah = uw * sin + uh * cos;
+  const cx = px + uw / 2;
+  const cy = py + uh / 2;
+  return { x: cx - aw / 2, y: cy - ah / 2, w: aw, h: ah };
+}
+
+// Keep getCardRect as an alias used elsewhere (minimap, etc.)
 function getCardRect(n) {
-  const card = document.querySelector(`[data-id="${n.id}"]`);
-  if (!card) return null;
-  return {
-    x: n.x, y: n.y,
-    w: Math.ceil(card.offsetWidth  / GRID) * GRID,
-    h: Math.ceil(card.offsetHeight / GRID) * GRID
-  };
+  const bb = getCardAABB(n);
+  if (!bb) return null;
+  return { x: bb.x, y: bb.y, w: bb.w, h: bb.h };
 }
 
 function rectsOverlap(a, b) {
-  // strict overlap only — blocks can be adjacent (touching) but not overlapping
+  // strict overlap only — touching edges are allowed
   return a.x < b.x + b.w && a.x + a.w > b.x &&
          a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
 function resolveOverlap(dragNode, nx, ny) {
-  // Try the requested position; if it overlaps push away
   const others = S.nodes.filter(n => n.id !== dragNode.id);
-  const dEl = document.querySelector(`[data-id="${dragNode.id}"]`);
-  const dW = dEl ? Math.ceil(dEl.offsetWidth  / GRID) * GRID : 224;
-  const dH = dEl ? Math.ceil(dEl.offsetHeight / GRID) * GRID : 96;
-  const dr = { x: nx, y: ny, w: dW, h: dH };
+  // AABB of the dragged card at the candidate position
+  let dr = getCardAABB(dragNode, nx, ny);
 
   for (const o of others) {
-    const or = getCardRect(o);
+    const or = getCardAABB(o);
     if (!or) continue;
     if (rectsOverlap(dr, or)) {
-      // Push horizontally or vertically — choose shortest escape
-      const pushRight = or.x + or.w - nx;
-      const pushLeft  = nx + dW - or.x;
-      const pushDown  = or.y + or.h - ny;
-      const pushUp    = ny + dH - or.y;
+      // Push away along the axis of least penetration
+      const pushRight = or.x + or.w - dr.x;
+      const pushLeft  = dr.x + dr.w - or.x;
+      const pushDown  = or.y + or.h - dr.y;
+      const pushUp    = dr.y + dr.h - or.y;
       const minH = Math.min(pushRight, pushLeft);
       const minV = Math.min(pushDown, pushUp);
       if (minH <= minV) {
-        nx = pushRight < pushLeft ? or.x + or.w : or.x - dW;
+        nx += (pushRight < pushLeft) ? pushRight : -pushLeft;
       } else {
-        ny = pushDown < pushUp ? or.y + or.h : or.y - dH;
+        ny += (pushDown < pushUp)    ? pushDown  : -pushUp;
       }
-      dr.x = nx; dr.y = ny;
+      nx = Math.max(0, nx); ny = Math.max(0, ny);
+      dr = getCardAABB(dragNode, nx, ny);
     }
   }
   return { x: Math.max(0, nx), y: Math.max(0, ny) };
@@ -2389,6 +2719,7 @@ document.addEventListener('mousemove', e => {
       S.drag.x = resolved.x;
       S.drag.y = resolved.y;
     }
+    expandCanvasIfNeeded();
     renderCanvas();
     return;
   }
@@ -2409,10 +2740,9 @@ document.addEventListener('mousemove', e => {
 
     S.multiSel.clear();
     S.nodes.forEach(n => {
-      const el = document.querySelector(`[data-id="${n.id}"]`);
-      if (!el) return;
-      const ex = n.x, ey = n.y, ew = el.offsetWidth, eh = el.offsetHeight;
-      if (ex < rx+rw && ex+ew > rx && ey < ry+rh && ey+eh > ry) S.multiSel.add(n.id);
+      const bb = getCardAABB(n);
+      if (!bb) return;
+      if (bb.x < rx+rw && bb.x+bb.w > rx && bb.y < ry+rh && bb.y+bb.h > ry) S.multiSel.add(n.id);
     });
     S.selected = null;
     renderCanvas();
@@ -2430,6 +2760,7 @@ document.addEventListener('mouseup', e => {
   }
   S.drag = null; S.dragOffsets = [];
   sc.classList.remove('rubber-sel');
+  expandCanvasIfNeeded();
   if (S.rubber) {
     S.rubber = null;
     document.getElementById('rubber-band').style.display = 'none';
@@ -2572,25 +2903,14 @@ function renderProps() {
 
   let bfHtml = '';
   bfUserOnly.forEach((f, i) => {
-    const isDefault = false;
     const color = bfColor(f, i);
-    const label = '';
-    const delBtn = `<button onclick="removeBitfield(${f._id})" style="background:transparent;border:none;color:#ef535070;cursor:pointer;font-size:14px;padding:2px 5px;line-height:1;border-radius:3px;transition:color 0.1s,background 0.1s" onmouseover="this.style.color='#ef5350';this.style.background='#3a1515'" onmouseout="this.style.color='#ef535070';this.style.background='transparent'" title="Delete bitfield">🗑</button>`;
-    const accessEdit = `<select style="background:var(--bg4);border:1px solid var(--border2);border-radius:3px;color:var(--text2);font-size:10px;padding:1px 3px;cursor:pointer" onchange="setBitfieldAccess(${f._id},this.value)">
-          ${['RW','RO','WO','RESERVED'].map(a=>`<option value="${a}"${a===f.access?' selected':''}>${a}</option>`).join('')}
-         </select>`;
-    const nameField = `<input value="${f.name}" style="background:transparent;border:none;border-bottom:1px solid ${color}40;color:${color};font-family:var(--font-code);font-size:11px;font-weight:600;padding:1px 2px;width:100%;outline:none;transition:border-color 0.15s"
-           onfocus="this.style.borderBottomColor='${color}'"
-           oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')"
-           onblur="renameBitfield(${f._id},this.value,this)"
-           onkeydown="if(event.key==='Enter')this.blur()"
-           title="Click to rename"/>`;
+    const accessBadge = `<span style="background:var(--bg4);border:1px solid var(--border2);border-radius:3px;color:var(--text2);font-size:10px;padding:1px 5px;">${f.access}</span>`;
     bfHtml += `<div style="display:flex;gap:4px;align-items:center;margin-bottom:3px;padding:4px 6px;background:var(--bg3);border-radius:3px;border-left:3px solid ${color}">
       <div style="flex:1;min-width:0;overflow:hidden">
-        <div style="display:flex;align-items:center;gap:2px">${nameField}</div>
-        <div style="display:flex;align-items:center;gap:6px;margin-top:2px">[${f.bitEnd}:${f.bitStart}] &nbsp;${accessEdit}</div>
+        <span style="font-family:var(--font-code);font-size:11px;font-weight:600;color:${color}">${f.name}</span>
+        <span style="font-size:10px;color:var(--text3);margin-left:6px">[${f.bitEnd}:${f.bitStart}]</span>
+        <span style="margin-left:6px">${accessBadge}</span>
       </div>
-      ${delBtn}
     </div>`;
   });
 
@@ -2598,7 +2918,6 @@ function renderProps() {
     <div class="prop-grp"><label class="prop-lbl">Name <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-name" value="${n.name}" onblur="setProp('name',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');ppClearErr('pp-name-err')"/><span class="field-err" id="pp-name-err"></span></div>
     <div class="prop-grp"><label class="prop-lbl">Register Type</label><input class="prop-in" value="${regType}" disabled/></div>
     ${isInternal ? `<div class="prop-grp"><label class="prop-lbl">Core</label><input class="prop-in" id="pp-core" value="${n.coreVal ?? 0}" type="number" min="0" onblur="setPropCore(this.value)" onkeydown="if(event.key==='Enter')this.blur()"/></div>` : ''}
-    ${isInternal ? `<div class="prop-grp"><label class="prop-lbl">Register Access</label><select class="prop-sel" onchange="setPropInternalAccess(this.value)"><option value="RW"${(n.internalAccess||'RW')==='RW'?' selected':''}>RW (Read/Write)</option><option value="RO"${(n.internalAccess||'RW')==='RO'?' selected':''}>RO (Read Only)</option></select></div>` : ''}
     <div class="prop-grp"><label class="prop-lbl">Size</label><input class="prop-in" value="${regSize} bit" disabled/></div>
     ${!isInternal && n.regAddr !== undefined ? `<div class="prop-grp"><label class="prop-lbl">Address <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-regaddr" value="${n.regAddr||''}" onblur="setProp('regAddr',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-regaddr-err')" placeholder="0x40000000"/><span class="field-err" id="pp-regaddr-err"></span></div>` : ''}
     ${!isInternal && n.accessWidths && n.accessWidths.length ? `<div class="prop-grp"><label class="prop-lbl">Access Widths</label><input class="prop-in" value="${n.accessWidths.map(w=>w+'b').join(', ')}" disabled/></div>` : ''}
@@ -2612,10 +2931,10 @@ function renderProps() {
           <input type="checkbox" id="pp-bf-chk" ${hasBfEnabled ? 'checked' : ''} onchange="ppToggleBitfields()" style="width:13px;height:13px;accent-color:var(--blue);cursor:pointer"/>
           <span class="prop-lbl" style="margin:0">Bit Fields (${regSize}-bit)</span>
         </label>
-        ${hasBfEnabled ? `<button onclick="ppEditBitfields()" type="button" style="background:var(--bg3);border:1px solid var(--border2);border-radius:3px;color:var(--text2);font-size:11px;padding:3px 8px;cursor:pointer">Edit…</button>` : ''}
+        ${hasBfEnabled ? `<button onclick="ppEditBitfields()" type="button" style="background:var(--bg3);border:1px solid var(--border2);border-radius:3px;color:var(--blue);font-size:11px;padding:3px 10px;cursor:pointer;font-weight:600" title="Open Bitfield Editor">✎ Edit</button>` : ''}
       </div>
       <div id="pp-bf-list" style="display:${hasBfEnabled ? '' : 'none'}">
-        ${hasBfEnabled ? (bfUserOnly.length === 0 ? `<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px 0">No custom bitfields — add fields to cover all ${regSize} bits</div>` : bfHtml) : ''}
+        ${hasBfEnabled ? (bfUserOnly.length === 0 ? `<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px 0">No custom bitfields — click Edit to add fields</div>` : bfHtml) : ''}
         ${hasBfEnabled ? ppBfCoverageHtml(n) : ''}
       </div>
     </div>`;
@@ -2641,7 +2960,8 @@ function openAddBitfield() {
 
   const html = `
     <div style="display:flex;flex-direction:column;gap:8px">
-      <div class="prop-grp"><label class="prop-lbl">Field Name (A–Z, 0–9, _)</label><input class="prop-in" id="bf-name" placeholder="e.g. EN, MODE" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')"/></div>
+      <div class="prop-grp"><label class="prop-lbl">Field Name (A–Z, 0–9, _)</label><input class="prop-in" id="bf-name" placeholder="e.g. EN, MODE" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');document.getElementById('bf-name-err').textContent=''"/>
+      <span class="field-err" id="bf-name-err"></span></div>
       <div style="display:flex;gap:8px">
         <div class="prop-grp" style="flex:1">
           <label class="prop-lbl">Bit Start (fixed)</label>
@@ -2668,17 +2988,37 @@ function openAddBitfield() {
     const bfSize   = parseInt(document.getElementById('bf-size').value);
     const bfAccess = document.getElementById('bf-access').value;
     const errEl    = document.getElementById('bf-err');
+    const nameErrEl = document.getElementById('bf-name-err');
     const bfStart  = nextStart;
     const bfEnd    = nextStart + bfSize - 1;
 
-    if (!bfName) { errEl.textContent = 'Name is required'; _confirmCallback = null; openAddBitfield(); return; }
-    if (!/^[A-Z][A-Z0-9_]*$/.test(bfName)) { errEl.textContent = 'Name must start with a letter and contain only A–Z, 0–9, _'; _confirmCallback = null; openAddBitfield(); return; }
+    if (nameErrEl) nameErrEl.textContent = '';
+    if (errEl) errEl.textContent = '';
+
+    if (!bfName) {
+      if (nameErrEl) nameErrEl.textContent = 'Name is required';
+      else if (errEl) errEl.textContent = 'Name is required';
+      _confirmCallback = arguments.callee;
+      return;
+    }
+    if (!/^[A-Z][A-Z0-9_]*$/.test(bfName)) {
+      if (nameErrEl) nameErrEl.textContent = 'Name must start with a letter and contain only A–Z, 0–9, _';
+      else if (errEl) errEl.textContent = 'Name must start with a letter and contain only A–Z, 0–9, _';
+      _confirmCallback = arguments.callee;
+      return;
+    }
     const nameExists = (n.bitfields||[]).some(f => !f.isDefault && f.name === bfName);
     const clashesDefault = bfName === (n.baseName || n.name);
-    if (nameExists || clashesDefault) { errEl.textContent = `A bitfield named "${bfName}" already exists in this register`; _confirmCallback = null; openAddBitfield(); return; }
+    if (nameExists || clashesDefault) {
+      if (nameErrEl) nameErrEl.textContent = `A bitfield named "${bfName}" already exists in this register`;
+      else if (errEl) errEl.textContent = `A bitfield named "${bfName}" already exists in this register`;
+      _confirmCallback = arguments.callee;
+      return;
+    }
     if (isNaN(bfSize) || bfSize < 1 || bfSize > maxSize) {
-      errEl.textContent = `Size must be between 1 and ${maxSize} bit(s)`;
-      _confirmCallback = null; openAddBitfield(); return;
+      if (errEl) errEl.textContent = `Size must be between 1 and ${maxSize} bit(s)`;
+      _confirmCallback = arguments.callee;
+      return;
     }
 
     if (!n.bitfields) n.bitfields = [];
@@ -3088,6 +3428,7 @@ function loadProject() {
       const projName = d.name || fileBase || 'untitled';
       Object.assign(S,{nodes,project:projName,nextId:d.nextId||1,selected:null});
       renderTree(); renderCanvas(); renderProps(); updateStats();
+      expandCanvasIfNeeded();
       status(`Project "${filename || projName}" loaded`);
     } catch { status('Invalid project file','err'); }
   });
@@ -3195,6 +3536,7 @@ function importProject() {
       });
 
       renderTree(); renderCanvas(); renderProps(); updateStats();
+      expandCanvasIfNeeded();
       status(`Imported ${incoming.length} node(s) from "${d.name || 'unknown'}"`);
     } catch(e) {
       status('Invalid project file', 'err');
@@ -3706,7 +4048,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-['modal-mal','modal-ral','modal-export','modal-edit-mal','modal-edit-ral','modal-confirm','modal-save','modal-bf-editor'].forEach(id => {
+['modal-mal','modal-ral','modal-export','modal-edit-mal','modal-edit-ral','modal-confirm','modal-save','modal-bf-editor','modal-find'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('click', e => { if(e.target===e.currentTarget) closeModal(id); });
   });
@@ -3803,6 +4145,31 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="mfoot">
       <button class="btn btn-ghost" onclick="closeModal('modal-export')">Close</button>
       <button class="btn btn-blue" onclick="expDownloadZip()">⬇ Download all (.zip)</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Find -->
+<div class="overlay" id="modal-find">
+  <div class="modal" style="min-width:420px;max-width:500px">
+    <div class="mhdr" style="color:var(--blue)">
+      <span>🔍 Find</span>
+      <button class="mx" onclick="closeFindPopup()">×</button>
+    </div>
+    <div class="mbody" style="padding:12px 16px 8px">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <input class="prop-in" id="find-input" placeholder="e.g. GPIO*, *REG, CTRL_*"
+          style="flex:1;font-family:var(--font-code)"
+          oninput="runFind()"
+          onkeydown="if(event.key==='Enter')runFind();if(event.key==='Escape')closeFindPopup()"/>
+        <button class="btn btn-blue" onclick="runFind()" style="padding:5px 14px;white-space:nowrap">Find</button>
+        <button class="btn btn-ghost" onclick="closeFindPopup()" style="padding:5px 14px">Cancel</button>
+      </div>
+      <div id="find-hint" style="font-size:10px;color:var(--text3);margin-bottom:8px">
+        Use <code style="color:var(--blue)">*</code> as wildcard — e.g. <code style="color:var(--cyan)">GPIO*</code>, <code style="color:var(--cyan)">*REG</code>
+      </div>
+      <div id="find-results" style="display:flex;flex-direction:column;gap:3px;max-height:340px;overflow-y:auto"></div>
+      <div id="find-status" style="font-size:11px;color:var(--text3);margin-top:8px;min-height:16px"></div>
     </div>
   </div>
 </div>
