@@ -1,0 +1,165 @@
+{
+  "name": "untitled",
+  "nodes": [
+    {
+      "id": 1,
+      "layer": "ral",
+      "name": "AVCDR",
+      "baseName": "AVCDR",
+      "type": "register",
+      "regType": "MMIO",
+      "regSize": 8,
+      "coreVal": null,
+      "regAddr": "0x00000000",
+      "accessWidths": [
+        8
+      ],
+      "internalAccess": null,
+      "resetVal": "0x00000000",
+      "defaultBfAccess": "RW",
+      "defaultBfReservedVal": null,
+      "desc": "",
+      "bitfields": [
+        {
+          "_id": 1,
+          "name": "H",
+          "bitStart": 7,
+          "bitEnd": 7,
+          "access": "RW",
+          "isDefault": false
+        },
+        {
+          "_id": 2,
+          "name": "G",
+          "bitStart": 6,
+          "bitEnd": 6,
+          "access": "RW",
+          "isDefault": false
+        },
+        {
+          "_id": 3,
+          "name": "F",
+          "bitStart": 5,
+          "bitEnd": 5,
+          "access": "RW",
+          "isDefault": false
+        },
+        {
+          "_id": 4,
+          "name": "E",
+          "bitStart": 4,
+          "bitEnd": 4,
+          "access": "RW",
+          "isDefault": false
+        },
+        {
+          "_id": 5,
+          "name": "D",
+          "bitStart": 3,
+          "bitEnd": 3,
+          "access": "RW",
+          "isDefault": false
+        },
+        {
+          "_id": 6,
+          "name": "C",
+          "bitStart": 2,
+          "bitEnd": 2,
+          "access": "RW",
+          "isDefault": false
+        },
+        {
+          "_id": 7,
+          "name": "B",
+          "bitStart": 1,
+          "bitEnd": 1,
+          "access": "RW",
+          "isDefault": false
+        },
+        {
+          "_id": 8,
+          "name": "A",
+          "bitStart": 0,
+          "bitEnd": 0,
+          "access": "RW",
+          "isDefault": false
+        }
+      ],
+      "_nextBfId": 9,
+      "x": 480,
+      "y": 416,
+      "_uw": 224,
+      "_uh": 227,
+      "rotation": 0
+    },
+    {
+      "id": 2,
+      "layer": "ral",
+      "name": "YY",
+      "baseName": "YY",
+      "type": "register",
+      "regType": "MMIO",
+      "regSize": 32,
+      "coreVal": null,
+      "regAddr": "0xFF440000",
+      "accessWidths": [
+        8,
+        32
+      ],
+      "internalAccess": null,
+      "resetVal": "0x00000000",
+      "defaultBfAccess": "RW",
+      "defaultBfReservedVal": null,
+      "desc": "",
+      "bitfields": [
+        {
+          "_id": 1,
+          "name": "JKL",
+          "bitStart": 30,
+          "bitEnd": 31,
+          "access": "RW",
+          "isDefault": false
+        },
+        {
+          "_id": 2,
+          "name": "P",
+          "bitStart": 15,
+          "bitEnd": 29,
+          "access": "RW",
+          "isDefault": false
+        },
+        {
+          "_id": 3,
+          "name": "U",
+          "bitStart": 14,
+          "bitEnd": 14,
+          "access": "RW",
+          "isDefault": false
+        },
+        {
+          "_id": 4,
+          "name": "IO",
+          "bitStart": 1,
+          "bitEnd": 13,
+          "access": "RW",
+          "isDefault": false
+        },
+        {
+          "_id": 5,
+          "name": "R",
+          "bitStart": 0,
+          "bitEnd": 0,
+          "access": "RW",
+          "isDefault": false
+        }
+      ],
+      "_nextBfId": 6,
+      "x": 736,
+      "y": 416,
+      "_uw": 608,
+      "_uh": 227,
+      "rotation": 0
+    }
+  ],
+  "nextId": 3
+}
