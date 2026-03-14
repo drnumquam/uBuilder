@@ -1028,39 +1028,35 @@ function findFreePosition(cardW, cardH) {
   const cy = snapFloor(cscroll.scrollTop  / zoom + visH / 2 - cardH / 2);
 
   // Check if a proposed (x,y) for a card of (cardW×cardH) collides with:
-  //   - existing nodes (with GRID margin between them)
-  //   - existing block rects (with GRID margin)
+  //   - existing nodes (with GRID margin)
+  //   - existing block visual rects (with GRID margin, including header)
   function overlaps(x, y) {
-    const M = GRID; // minimum gap = 1 grid cell
-    // Check nodes
+    const M     = GRID;
+    const HDR_H = 28;
+    const newRect = { x, y, w: cardW, h: cardH };
+
+    // Check vs all existing nodes
     const nodeHit = S.nodes.some(n => {
-      const el = document.querySelector(`[data-id="${n.id}"]`);
-      const nw = el && el.offsetWidth  > 0 ? Math.ceil(el.offsetWidth  / GRID) * GRID : (n._uw || 224);
-      const nh = el && el.offsetHeight > 0 ? Math.ceil(el.offsetHeight / GRID) * GRID : (n._uh || 128);
-      return !(x + cardW + M <= n.x || n.x + nw + M <= x ||
-               y + cardH + M <= n.y || n.y + nh + M <= y);
+      const bb = getCardAABB(n); // uses live DOM dims
+      const ob = { x: bb.x - M, y: bb.y - M, w: bb.w + M * 2, h: bb.h + M * 2 };
+      return rectsOverlap(newRect, ob);
     });
     if (nodeHit) return true;
-    // Check block rects
+
+    // Check vs all block visual rects (PAD + header)
     const blockHit = S.blocks.some(blk => {
       const bnodes = blk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
       if (!bnodes.length) return false;
       let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity;
       bnodes.forEach(n => {
-        const el = document.querySelector(`[data-id="${n.id}"]`);
-        const nw = el && el.offsetWidth  > 0 ? Math.ceil(el.offsetWidth  / GRID) * GRID : (n._uw || 224);
-        const nh = el && el.offsetHeight > 0 ? Math.ceil(el.offsetHeight / GRID) * GRID : (n._uh || 128);
-        if (n.x       < bx1) bx1 = n.x;
-        if (n.y       < by1) by1 = n.y;
-        if (n.x + nw  > bx2) bx2 = n.x + nw;
-        if (n.y + nh  > by2) by2 = n.y + nh;
+        const bb = getCardAABB(n);
+        if (bb.x < bx1) bx1 = bb.x; if (bb.y < by1) by1 = bb.y;
+        if (bb.x + bb.w > bx2) bx2 = bb.x + bb.w; if (bb.y + bb.h > by2) by2 = bb.y + bb.h;
       });
-      bx1 = Math.floor(bx1 / GRID) * GRID - GRID;  // block outer edge (with PAD)
-      by1 = Math.floor(by1 / GRID) * GRID - GRID;
-      bx2 = Math.ceil(bx2  / GRID) * GRID + GRID;
-      by2 = Math.ceil(by2  / GRID) * GRID + GRID;
-      return !(x + cardW + M <= bx1 || bx2 + M <= x ||
-               y + cardH + M <= by1 || by2 + M <= y);
+      const blkRect = { x: bx1 - GRID - M, y: by1 - GRID - HDR_H - M,
+                        w: (bx2 - bx1) + GRID * 2 + M * 2,
+                        h: (by2 - by1) + GRID * 2 + HDR_H + M * 2 };
+      return rectsOverlap(newRect, blkRect);
     });
     return blockHit;
   }
@@ -1437,7 +1433,8 @@ function confirmPutInBlock() {
     return;
   }
 
-  const selectedIds = new Set(S.multiSel);
+  // Keep the original selection — do NOT expand it with child block nodes
+  const originalSelection = new Set(S.multiSel);
 
   // Helper: all node ids reachable from a block (recursively)
   function allNodeIds(blk) {
@@ -1459,24 +1456,69 @@ function confirmPutInBlock() {
     });
   }
 
-  // A block becomes a direct child of the new block if ALL its nodes are selected
+  // A block becomes a direct child only if ALL its nodes were in the original selection
   const directChildIds = [];
   S.blocks.forEach(blk => {
     const nodeSet = allNodeIds(blk);
-    const allSelected = [...nodeSet].every(id => selectedIds.has(id));
+    const allSelected = [...nodeSet].every(id => originalSelection.has(id));
     if (allSelected && !isDescendantOfAny(blk.id, directChildIds)) {
       directChildIds.push(blk.id);
-      nodeSet.forEach(id => selectedIds.add(id));
+      // Do NOT add nodeSet to selectedIds — child block nodes are managed via childBlockIds
     }
   });
 
-  const nodeIds = [...selectedIds];
-  S.blocks.push({ id: S.nextBlockId++, name, nodeIds, childBlockIds: directChildIds });
+  // nodeIds = exactly the originally selected nodes (nothing more)
+  const nodeIds = [...originalSelection];
+  const newBlk = { id: S.nextBlockId++, name, nodeIds, childBlockIds: directChildIds };
+  S.blocks.push(newBlk);
   S.multiSel.clear();
   S.selected = null;
   closeModal('modal-put-block');
-  // Double rAF: first frame closes the modal, second frame re-renders with cleared state
-  requestAnimationFrame(() => requestAnimationFrame(() => { renderTree(); renderCanvas(); }));
+
+  // ── After creating the block, push external cards that overlap its rect away ──
+  // Do this after a rAF so DOM dimensions are available
+  requestAnimationFrame(() => {
+    const HDR_H = 28;
+    const M = GRID;
+    // Compute block visual rect
+    const bnodes = newBlk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
+    if (bnodes.length) {
+      let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity;
+      bnodes.forEach(n => {
+        const bb = getCardAABB(n);
+        if (bb.x < bx1) bx1 = bb.x; if (bb.y < by1) by1 = bb.y;
+        if (bb.x + bb.w > bx2) bx2 = bb.x + bb.w; if (bb.y + bb.h > by2) by2 = bb.y + bb.h;
+      });
+      const blkRect = { x: bx1 - GRID, y: by1 - GRID - HDR_H,
+                        w: (bx2 - bx1) + GRID * 2, h: (by2 - by1) + GRID * 2 + HDR_H };
+
+      // Find external nodes that overlap the block rect
+      const externalNodes = S.nodes.filter(n => !originalSelection.has(n.id));
+      externalNodes.forEach(n => {
+        const bb = getCardAABB(n);
+        const nr = { x: bb.x, y: bb.y, w: bb.w, h: bb.h };
+        if (!rectsOverlap(nr, blkRect)) return;
+        // Find free position for this node starting from its current position
+        const snappedW = Math.ceil(bb.w / GRID) * GRID;
+        const snappedH = Math.ceil(bb.h / GRID) * GRID;
+        const free = findNearestFreeGridPos(
+          Math.round(n.x / GRID) * GRID,
+          Math.round(n.y / GRID) * GRID,
+          snappedW, snappedH, [n.id]
+        );
+        // Back-calculate n.x/n.y from visual corner
+        if (n.rotation === 90) {
+          const uw = n._uw || snappedW, uh = n._uh || snappedH;
+          n.x = Math.max(0, free.x - (uw - uh) / 2);
+          n.y = Math.max(0, free.y - (uh - uw) / 2);
+        } else {
+          n.x = Math.max(0, free.x);
+          n.y = Math.max(0, free.y);
+        }
+      });
+    }
+    renderTree(); renderCanvas();
+  });
   const msg = directChildIds.length
     ? `Block "${name}" created with ${nodeIds.length} card${nodeIds.length !== 1 ? 's' : ''} and ${directChildIds.length} nested block${directChildIds.length !== 1 ? 's' : ''}`
     : `Block "${name}" created with ${nodeIds.length} card${nodeIds.length !== 1 ? 's' : ''}`;
@@ -3691,49 +3733,95 @@ document.addEventListener('mousemove', e => {
       }
 
     } else {
-      // ── CARD DRAG: check each dragged card vs all external cards AND block rects ──
+      // ── CARD DRAG ──
       const HDR_H = 28;
 
-      // Home block of the dragged card — can move freely inside it
-      const homeBlockIds = new Set();
-      const homeNodeIds  = new Set(draggedIds);
+      // Find home block (if any) — the innermost block the dragged card belongs to
+      // (the one whose border acts as the movement boundary)
+      let homeBlk = null;
       S.blocks.forEach(blk => {
         if (blk.nodeIds.includes(S.drag.id)) {
-          homeBlockIds.add(blk.id);
-          blk.nodeIds.forEach(id => homeNodeIds.add(id));
+          // Pick the innermost (deepest) block
+          if (!homeBlk) {
+            homeBlk = blk;
+          } else {
+            // prefer the one that is a child of the other
+            const homeIsParent = (homeBlk.childBlockIds || []).includes(blk.id);
+            if (homeIsParent) homeBlk = blk;
+          }
         }
       });
 
-      const obstacles = S.nodes.filter(n => !homeNodeIds.has(n.id));
+      if (homeBlk) {
+        // ── Card is INSIDE a block ──
+        // Compute current block inner rect (frozen — block does NOT resize during drag)
+        // Use all members INCLUDING the dragged card at their current positions
+        // to define the block's fixed boundary.
+        const allMembers = homeBlk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
+        let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity;
+        allMembers.forEach(n => {
+          const bb = getCardAABB(n);
+          if (bb.x < bx1) bx1 = bb.x; if (bb.y < by1) by1 = bb.y;
+          if (bb.x + bb.w > bx2) bx2 = bb.x + bb.w; if (bb.y + bb.h > by2) by2 = bb.y + bb.h;
+        });
+        // Block inner boundary (with PAD, below header)
+        const innerLeft   = bx1 - PAD;
+        const innerTop    = by1 - PAD;
+        const innerRight  = bx2 + PAD;
+        const innerBottom = by2 + PAD;
 
-      // Check dragged card vs external cards
-      outer: for (const { node, cx, cy } of candidates) {
-        const dr = getCardAABB(node, cx, cy);
-        for (const o of obstacles) {
-          const or = getCardAABB(o);
-          if (rectsOverlap(dr, or)) { hasOverlap = true; break outer; }
-        }
-      }
+        // Co-members are obstacles (no overlapping each other)
+        const coMembers = allMembers.filter(n => !draggedIds.has(n.id));
 
-      // Check dragged card vs block rects of blocks it doesn't belong to
-      if (!hasOverlap) {
-        for (const { node, cx, cy } of candidates) {
+        outer: for (const { node, cx, cy } of candidates) {
           const dr = getCardAABB(node, cx, cy);
-          for (const blk of S.blocks) {
-            if (homeBlockIds.has(blk.id)) continue; // own block — free movement
-            const bnodes = blk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
-            if (!bnodes.length) continue;
-            let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity;
-            bnodes.forEach(n => {
-              const bb = getCardAABB(n);
-              if (bb.x < bx1) bx1 = bb.x; if (bb.y < by1) by1 = bb.y;
-              if (bb.x + bb.w > bx2) bx2 = bb.x + bb.w; if (bb.y + bb.h > by2) by2 = bb.y + bb.h;
-            });
-            const blkRect = { x: bx1 - PAD, y: by1 - PAD - HDR_H,
-                              w: (bx2 - bx1) + PAD * 2, h: (by2 - by1) + PAD * 2 + HDR_H };
-            if (rectsOverlap(dr, blkRect)) { hasOverlap = true; break; }
+
+          // 1. Must not exit block border
+          if (dr.x < innerLeft || dr.y < innerTop ||
+              dr.x + dr.w > innerRight || dr.y + dr.h > innerBottom) {
+            hasOverlap = true; break outer;
           }
-          if (hasOverlap) break;
+
+          // 2. Must not overlap co-members
+          for (const o of coMembers) {
+            const or = getCardAABB(o);
+            if (rectsOverlap(dr, or)) { hasOverlap = true; break outer; }
+          }
+        }
+
+      } else {
+        // ── Card is on the canvas (no home block) ──
+        // Obstacles: all other cards + all block rects
+        const obstacles = S.nodes.filter(n => !draggedIds.has(n.id));
+
+        // Card vs cards
+        outer: for (const { node, cx, cy } of candidates) {
+          const dr = getCardAABB(node, cx, cy);
+          for (const o of obstacles) {
+            const or = getCardAABB(o);
+            if (rectsOverlap(dr, or)) { hasOverlap = true; break outer; }
+          }
+        }
+
+        // Card vs block rects
+        if (!hasOverlap) {
+          for (const { node, cx, cy } of candidates) {
+            const dr = getCardAABB(node, cx, cy);
+            for (const blk of S.blocks) {
+              const bnodes = blk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
+              if (!bnodes.length) continue;
+              let ox1 = Infinity, oy1 = Infinity, ox2 = -Infinity, oy2 = -Infinity;
+              bnodes.forEach(n => {
+                const bb = getCardAABB(n);
+                if (bb.x < ox1) ox1 = bb.x; if (bb.y < oy1) oy1 = bb.y;
+                if (bb.x + bb.w > ox2) ox2 = bb.x + bb.w; if (bb.y + bb.h > oy2) oy2 = bb.y + bb.h;
+              });
+              const blkRect = { x: ox1 - PAD, y: oy1 - PAD - HDR_H,
+                                w: (ox2 - ox1) + PAD * 2, h: (oy2 - oy1) + PAD * 2 + HDR_H };
+              if (rectsOverlap(dr, blkRect)) { hasOverlap = true; break; }
+            }
+            if (hasOverlap) break;
+          }
         }
       }
     }
@@ -3750,23 +3838,26 @@ document.addEventListener('mousemove', e => {
       S.dragLastValidY = ny;
       S._dragMoved = true;
 
-      // ── Live membership: only for single card drag ──
+      // ── Live membership: only when card is on canvas (not inside a block) ──
+      // When a card is inside a block, it stays in the block — no live resize.
+      // Membership changes (enter/exit) only happen via mouseup (updateBlockMembership).
       if (isCardDrag && !isGroupDrag) {
         const nodeId = S.drag.id;
-        const bb = getNodeAABB(S.drag);
-        const mcx = (bb.x + bb.r) / 2, mcy = (bb.y + bb.b) / 2;
-
-        S.blocks.forEach(blk => {
-          const wasInside = blk.nodeIds.includes(nodeId);
-          const fr = frozenRect(blk);
-          if (!fr) return; // whole block is moving, no change
-          const isInsideNow = mcx >= fr.x && mcx <= fr.r && mcy >= fr.y && mcy <= fr.b;
-          if (wasInside && !isInsideNow) {
-            blk.nodeIds = blk.nodeIds.filter(id => id !== nodeId);
-          } else if (!wasInside && isInsideNow) {
-            blk.nodeIds = [...blk.nodeIds, nodeId];
-          }
-        });
+        const isInsideAnyBlock = S.blocks.some(blk => blk.nodeIds.includes(nodeId));
+        if (!isInsideAnyBlock) {
+          // Card is on canvas — check if it enters a block
+          const bb = getNodeAABB(S.drag);
+          const mcx = (bb.x + bb.r) / 2, mcy = (bb.y + bb.b) / 2;
+          S.blocks.forEach(blk => {
+            const wasInside = blk.nodeIds.includes(nodeId);
+            const fr = frozenRect(blk);
+            if (!fr) return;
+            const isInsideNow = mcx >= fr.x && mcx <= fr.r && mcy >= fr.y && mcy <= fr.b;
+            if (!wasInside && isInsideNow) {
+              blk.nodeIds = [...blk.nodeIds, nodeId];
+            }
+          });
+        }
       }
     }
     // else: hard stop
