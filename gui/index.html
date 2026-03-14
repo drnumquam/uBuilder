@@ -314,8 +314,9 @@ body {
   background-size: 32px 32px; opacity: 0.25; pointer-events: none;
 }
 #cscroll { position: absolute; inset: 0; overflow: auto; }
-#cscroll            { cursor: grab; scrollbar-width: none; }
+#cscroll            { cursor: default; scrollbar-width: none; }
 #cscroll::-webkit-scrollbar { display: none; }
+#cscroll.pan-ready  { cursor: grab; }
 #cscroll.pan-active { cursor: grabbing; }
 #cscroll.rubber-sel { cursor: crosshair; }
 #czoom { transform-origin: 0 0; display: inline-block; min-width: 100%; min-height: 100%; }
@@ -358,12 +359,13 @@ body {
   transition: box-shadow 0.15s, border-color 0.15s, outline-color 0.1s;
   user-select: none;
   box-sizing: border-box;
+  cursor: default;
   /* Height is always content-driven; outline (not border) used for selection so height never changes */
 }
 .ub-card.ral-card {
   width: auto; min-width: 224px;
 }
-.ub-card:hover { box-shadow: var(--shadow-lg); border-color: var(--border2); }
+.ub-card:hover { box-shadow: var(--shadow-lg); border-color: var(--border2); cursor: move; }
 .ub-card.overlap { border-color: var(--red) !important; box-shadow: 0 0 0 2px #ef535040, var(--shadow-lg) !important; }
 .vbtn.snap-on { background: var(--bg4); color: var(--green); }
 /* Memory type border colors */
@@ -408,7 +410,7 @@ body {
   display: none;
 }
 
-.ch { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; cursor: move; user-select: none; }
+.ch { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; user-select: none; }
 .card-edit-btn {
   margin-left: auto; flex-shrink: 0;
   background: transparent; border: 1px solid transparent;
@@ -447,7 +449,7 @@ body {
 .cbadge.mt-INTERNAL { background: #1a1e3a !important; color: #6b8aff !important; }
 .cbadge.mt-RESERVED { background: #2a2a2a !important; color: #9e9e9e !important; }
 .cbadge.ral-mmio-reg { background: #1a2e1a !important; color: #a5d6a7 !important; }  /* light green — RAL register */
-.cbody { padding: 8px 12px; display: flex; flex-direction: column; gap: 3px; cursor: move; }
+.cbody { padding: 8px 12px; display: flex; flex-direction: column; gap: 3px; }
 .crow { display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 1px 0; }
 .ckey { color: var(--text3); font-family: var(--font-code); }
 .cval { color: var(--text2); font-family: var(--font-code); font-size: 11px; }
@@ -751,13 +753,6 @@ body {
         <label class="prop-lbl">Access Widths</label>
         <div id="ral-access-checkboxes" style="display:flex;flex-direction:column;gap:4px;padding:4px 0;"></div>
       </div>
-      <div class="prop-grp" id="ral-internal-access-grp" style="display:none">
-        <label class="prop-lbl">Register Access</label>
-        <select class="prop-sel" id="ral-internal-access">
-          <option value="RW">RW (Read/Write)</option>
-          <option value="RO">RO (Read Only)</option>
-        </select>
-      </div>
       <div class="prop-grp">
         <label class="prop-lbl">Value After Reset (hex)</label>
         <input class="prop-in" id="ral-reset" placeholder="e.g. 0x00000000" value="0x00000000" />
@@ -926,7 +921,7 @@ body {
 
 <script>
 const GRID = 32;
-const S = { project:'untitled', nodes:[], selected:null, multiSel:new Set(), nextId:1, adding:null, editing:null, drag:null, dragOX:0, dragOY:0, dragOffsets:[], snapEnabled:true, view:'design', rubber:null, zoom:1, pan:null, spaceDown:false };
+const S = { project:'untitled', nodes:[], selected:null, multiSel:new Set(), nextId:1, adding:null, editing:null, drag:null, dragOX:0, dragOY:0, dragOffsets:[], snapEnabled:true, view:'design', rubber:null, zoom:1, pan:null, ctrlDown:false };
 const RAL_TYPES = ['register','bitfield','register_group','peripheral_block'];
 
 /* ── Find a free position at the centre of the visible canvas, avoiding collisions ── */
@@ -1243,7 +1238,7 @@ function sortMal(dir, btn) {
   const allNodes = [...malNodes, ...ralNodes];
   if (allNodes.length < 1) { status('Nothing to sort — add segments or registers first'); return; }
 
-  // ── Helper: get the numeric address of any node ──
+  // ── Helper: get the numeric address of any node (Infinity = no address) ──
   function nodeAddr(n) {
     if (n.layer === 'mal') return isNaN(parseHex(n.segAddr)) ? Infinity : parseHex(n.segAddr);
     return n.regAddr ? parseHex(n.regAddr) : Infinity;
@@ -1255,12 +1250,17 @@ function sortMal(dir, btn) {
     return (n.regSize || 32) / 8;
   }
 
-  // ── Sort all nodes together by address ascending; nodes with no address go last ──
-  allNodes.sort((a, b) => nodeAddr(a) - nodeAddr(b));
-  S.nodes = allNodes;
+  // ── Separate nodes with address from those without ──
+  const withAddr    = allNodes.filter(n => nodeAddr(n) !== Infinity);
+  const withoutAddr = allNodes.filter(n => nodeAddr(n) === Infinity);
+
+  // ── Sort addressed nodes ascending; append no-address nodes at the end ──
+  withAddr.sort((a, b) => nodeAddr(a) - nodeAddr(b));
+  const sorted = [...withAddr, ...withoutAddr];
+  S.nodes = sorted;
 
   // ── Get card pixel dimensions, snapped to grid ──
-  const dims = allNodes.map(n => {
+  const dims = sorted.map(n => {
     const card = document.querySelector(`[data-id="${n.id}"]`);
     const w = card ? Math.ceil(card.offsetWidth  / GRID) * GRID : 7 * GRID; // 224px = 7*32
     const h = card ? Math.ceil(card.offsetHeight / GRID) * GRID : 3 * GRID; // 96px  = 3*32
@@ -1277,8 +1277,8 @@ function sortMal(dir, btn) {
   // ── GAP between non-adjacent items: one grid cell ──
   const GAP = GRID;
 
-  // ── Starting anchor: position of the node with the smallest address ──
-  const anchorNode = allNodes[0]; // already sorted, first = smallest address
+  // ── Starting anchor: keep current position of the first addressed node ──
+  const anchorNode = sorted[0];
   const START_X = Math.round(anchorNode.x / GRID) * GRID;
   const START_Y = Math.round(anchorNode.y / GRID) * GRID;
 
@@ -1292,7 +1292,7 @@ function sortMal(dir, btn) {
       const gap = next && areAdjacent(n, next.n) ? 0 : GAP;
       curY += h + (next ? gap : 0);
     });
-    status('Sorted by address — vertical ↕  (' + allNodes.length + ' nodes)');
+    status('Sorted by address — vertical ↕  (' + sorted.length + ' nodes' + (withoutAddr.length ? ', ' + withoutAddr.length + ' without address placed last' : '') + ')');
   } else {
     // ── Horizontal row: one row, sorted left-to-right ──
     let curX = START_X;
@@ -1303,12 +1303,34 @@ function sortMal(dir, btn) {
       const gap = next && areAdjacent(n, next.n) ? 0 : GAP;
       curX += w + (next ? gap : 0);
     });
-    status('Sorted by address — horizontal ↔  (' + allNodes.length + ' nodes)');
+    status('Sorted by address — horizontal ↔  (' + sorted.length + ' nodes' + (withoutAddr.length ? ', ' + withoutAddr.length + ' without address placed last' : '') + ')');
   }
 
   btn.classList.add('sorted');
   setTimeout(() => btn.classList.remove('sorted'), 800);
   renderTree(); renderCanvas();
+
+  // ── Pan canvas so the first addressed card is centred in the visible area ──
+  if (withAddr.length > 0) {
+    const firstNode = withAddr[0];
+    requestAnimationFrame(() => {
+      const cscroll = document.getElementById('cscroll');
+      const card = document.querySelector(`[data-id="${firstNode.id}"]`);
+      const cardW = card ? card.offsetWidth  : 224;
+      const cardH = card ? card.offsetHeight : 120;
+
+      // Centre of the first card in canvas (unscaled) coordinates
+      const cardCX = (firstNode.x + cardW / 2) * S.zoom;
+      const cardCY = (firstNode.y + cardH / 2) * S.zoom;
+
+      // Visible area of the scroll container
+      const vpW = cscroll.clientWidth;
+      const vpH = cscroll.clientHeight;
+
+      cscroll.scrollLeft = Math.max(0, cardCX - vpW / 2);
+      cscroll.scrollTop  = Math.max(0, cardCY - vpH / 2);
+    });
+  }
 }
 
 function openAdd(layer) {
@@ -1408,7 +1430,11 @@ function openCopyFrom(layer) {
     document.getElementById('ral-size').value = String(n.regSize || 32);
     document.getElementById('ral-addr').value = n.regAddr || '';
     document.getElementById('ral-reset').value = n.resetVal || '0x00000000';
-    document.getElementById('ral-default-bf-access').value = (n.bitfields && n.bitfields.find(f => f.isDefault)?.access) || 'RW';
+    // For INTERNAL: use internalAccess (legacy) or defaultBfAccess; for MMIO: use default bitfield access
+    document.getElementById('ral-default-bf-access').value =
+      (n.regType === 'INTERNAL'
+        ? (n.internalAccess || n.defaultBfAccess || 'RW')
+        : ((n.bitfields && n.bitfields.find(f => f.isDefault)?.access) || n.defaultBfAccess || 'RW'));
     const resValGrp = document.getElementById('ral-default-bf-reserved-val-grp');
     if (resValGrp) resValGrp.style.display = 'none';
     document.getElementById('ral-enum-chk').checked = false;
@@ -2200,11 +2226,7 @@ function ralModalUpdateFields() {
   coreIn.style.opacity = isInternal ? '1' : '0.4';
   document.getElementById('ral-core-grp').style.display = isInternal ? '' : 'none';
 
-  // INTERNAL access type: only for INTERNAL
-  const intAccessGrp = document.getElementById('ral-internal-access-grp');
-  if (intAccessGrp) intAccessGrp.style.display = isInternal ? '' : 'none';
-
-  // Address and access: only for MMIO
+  // Address and access widths: only for MMIO
   document.getElementById('ral-addr-grp').style.display = isInternal ? 'none' : '';
   document.getElementById('ral-access-grp').style.display = isInternal ? 'none' : '';
 
@@ -2309,7 +2331,7 @@ function confirmAddRal() {
   const regSize = parseInt(document.getElementById('ral-size').value) || 32;
   const coreVal = regType === 'INTERNAL' ? (parseInt(document.getElementById('ral-core').value) ?? 0) : null;
   const regAddr = regType === 'MMIO' ? document.getElementById('ral-addr').value.trim() : null;
-  const internalAccess = regType === 'INTERNAL' ? (document.getElementById('ral-internal-access')?.value || 'RW') : null;
+  const internalAccess = regType === 'INTERNAL' ? (document.getElementById('ral-default-bf-access')?.value || 'RW') : null;
 
   // Base address is mandatory for MMIO
   if (regType === 'MMIO') {
@@ -3025,7 +3047,8 @@ document.addEventListener('mouseup', e => {
   if (S.pan) {
     S.pan = null;
     sc.classList.remove('pan-active');
-    if (S.spaceDown) sc.classList.add('pan-ready');
+    if (S.ctrlDown) sc.classList.add('pan-ready');
+    else sc.classList.remove('pan-ready');
     return;
   }
   S.drag = null; S.dragOffsets = [];
@@ -4277,20 +4300,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // ── Pan: Space + drag or Middle mouse button ──
+  // ── Pan: Ctrl/Cmd + drag, or Middle mouse button ──
   document.addEventListener('keydown', e => {
-    if (e.code === 'Space' && !e.repeat) {
+    if ((e.code === 'ControlLeft' || e.code === 'ControlRight' || e.code === 'MetaLeft' || e.code === 'MetaRight') && !e.repeat) {
       const tag = document.activeElement?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      S.spaceDown = true;
+      S.ctrlDown = true;
       cscroll.classList.add('pan-ready');
-      e.preventDefault();
     }
   });
   document.addEventListener('keyup', e => {
-    if (e.code === 'Space') {
-      S.spaceDown = false;
-      cscroll.classList.remove('pan-ready', 'pan-active');
+    if (e.code === 'ControlLeft' || e.code === 'ControlRight' || e.code === 'MetaLeft' || e.code === 'MetaRight') {
+      S.ctrlDown = false;
+      if (!S.pan) cscroll.classList.remove('pan-ready', 'pan-active');
     }
   });
   cscroll.addEventListener('mousedown', e => {
@@ -4303,19 +4325,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (e.button !== 0) return;
     if (e.target.closest('.ub-card')) return;
-    // Ctrl/Cmd + left drag = rubber-band multi-selection
+    // Ctrl/Cmd + left drag on canvas = pan
     if (e.ctrlKey || e.metaKey) {
-      const r = cscroll.getBoundingClientRect();
-      const x0 = (e.clientX - r.left + cscroll.scrollLeft) / S.zoom;
-      const y0 = (e.clientY - r.top  + cscroll.scrollTop)  / S.zoom;
-      S.rubber = { x0, y0 };
-      S.multiSel.clear(); S.selected = null;
+      S.pan = { startX: e.clientX, startY: e.clientY, scrollX: cscroll.scrollLeft, scrollY: cscroll.scrollTop };
+      cscroll.classList.add('pan-active');
       e.preventDefault();
       return;
     }
-    // Plain left drag on empty canvas = pan
-    S.pan = { startX: e.clientX, startY: e.clientY, scrollX: cscroll.scrollLeft, scrollY: cscroll.scrollTop };
-    cscroll.classList.add('pan-active');
+    // Plain left drag on empty canvas = rubber-band multi-selection
+    const r = cscroll.getBoundingClientRect();
+    const x0 = (e.clientX - r.left + cscroll.scrollLeft) / S.zoom;
+    const y0 = (e.clientY - r.top  + cscroll.scrollTop)  / S.zoom;
+    S.rubber = { x0, y0 };
+    S.multiSel.clear(); S.selected = null;
     e.preventDefault();
   });
 
