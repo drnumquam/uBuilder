@@ -311,7 +311,9 @@ body {
 .cgrid {
   position: absolute; inset: 0;
   background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
-  background-size: 32px 32px; opacity: 0.25; pointer-events: none;
+  background-size: 32px 32px;
+  background-position: 0 0;
+  opacity: 0.25; pointer-events: none;
 }
 #cscroll { position: absolute; inset: 0; overflow: auto; }
 #cscroll            { cursor: default; scrollbar-width: none; }
@@ -319,6 +321,8 @@ body {
 #cscroll.pan-ready  { cursor: grab; }
 #cscroll.pan-active { cursor: grabbing; }
 #cscroll.rubber-sel { cursor: crosshair; }
+#cscroll.dragging   { cursor: move; }
+#cscroll.dragging * { cursor: move !important; }
 #czoom { transform-origin: 0 0; display: inline-block; min-width: 100%; min-height: 100%; }
 #cinner { position: relative; width: 2400px; height: 1800px; }
 
@@ -366,7 +370,7 @@ body {
 .ub-card.ral-card {
   width: auto; min-width: 224px;
 }
-.ub-card:hover { box-shadow: var(--shadow-lg); border-color: var(--border2); cursor: move; }
+.ub-card:hover { box-shadow: var(--shadow-lg); border-color: var(--border2); cursor: default; }
 .ub-card.overlap { border-color: var(--red) !important; box-shadow: 0 0 0 2px #ef535040, var(--shadow-lg) !important; }
 .vbtn.snap-on { background: var(--bg4); color: var(--green); }
 /* Memory type border colors */
@@ -420,7 +424,7 @@ body {
   pointer-events: auto;
   z-index: 0;
   box-sizing: border-box;
-  cursor: move;
+  cursor: default;
 }
 .canvas-block-label {
   position: absolute;
@@ -659,7 +663,7 @@ body {
       <button class="vbtn" onclick="setView(this)">MAL</button>
       <button class="vbtn" onclick="setView(this)">RAL</button>
       <div style="width:1px;height:18px;background:var(--border2);margin:0 4px"></div>
-      <button class="vbtn snap-btn snap-on" id="snap-btn" onclick="toggleSnap(this)" title="Snap to grid">⊞ Snap</button>
+      <button class="vbtn snap-btn snap-on" id="snap-btn" title="Snap to grid (always on)" style="cursor:default;opacity:0.7">⊞ Snap</button>
       <div style="width:1px;height:18px;background:var(--border2);margin:0 4px"></div>
       <div class="zoom-controls">
         <button class="zoom-btn" onclick="zoomBy(-0.1)" title="Zoom out">−</button>
@@ -974,52 +978,99 @@ const S = { project:'untitled', nodes:[], blocks:[], selected:null, selectedBloc
 const RAL_TYPES = ['register','bitfield','register_group','peripheral_block'];
 
 /* ── Find a free position at the centre of the visible canvas, avoiding collisions ── */
+// Estimate the snapped pixel dimensions of a RAL register card before it is in the DOM.
+// Used by findFreePosition so new cards don't land on top of others.
+function estimateRegCardSize(regSize, bitfields) {
+  const HDR     = 36;  // card header height
+  const ROW     = 20;  // approx height per bitfield row
+  const BF_BAR  = 24;  // bitfield bar row
+  const PADDING = 20;  // body padding top+bottom
+  const BF_ROWS = 14;  // approx height of each non-default bitfield row
+  const userBfs = (bitfields || []).filter(f => !f.isDefault);
+  let h = HDR + PADDING;
+  // address row + reset row + access row + desc = ~4 rows
+  h += 4 * ROW;
+  if (userBfs.length > 0) {
+    h += BF_BAR + userBfs.length * BF_ROWS;
+  }
+  // Width depends on register size
+  const minW = regSize >= 32 ? 256 : 224;
+  return {
+    w: Math.ceil(minW / GRID) * GRID,
+    h: Math.ceil(h    / GRID) * GRID
+  };
+}
+
 function findFreePosition(cardW, cardH) {
-  cardW = cardW || 224;
-  cardH = cardH || 128;
+  cardW = Math.ceil((cardW || 224) / GRID) * GRID;  // snap card size up to GRID multiple
+  cardH = Math.ceil((cardH || 128) / GRID) * GRID;
 
-  // Snap to grid
-  const snap = v => Math.round(v / GRID) * GRID;
+  // Snap a value to the nearest GRID multiple (card starts on a grid intersection)
+  const snapFloor = v => Math.round(Math.max(0, v) / GRID) * GRID;
 
-  // Compute the visible centre in canvas (logical) coordinates
+  // Visible centre in canvas logical coordinates, snapped to grid
   const cscroll = document.getElementById('cscroll');
   const zoom = S.zoom || 1;
   const visW = cscroll.clientWidth  / zoom;
   const visH = cscroll.clientHeight / zoom;
-  const cx = snap(cscroll.scrollLeft / zoom + visW  / 2 - cardW / 2);
-  const cy = snap(cscroll.scrollTop  / zoom + visH  / 2 - cardH / 2);
+  const cx = snapFloor(cscroll.scrollLeft / zoom + visW / 2 - cardW / 2);
+  const cy = snapFloor(cscroll.scrollTop  / zoom + visH / 2 - cardH / 2);
 
-  // Check collision with all existing nodes (use estimated card size)
-  const MARGIN = GRID; // minimum gap between cards
+  // Check if a proposed (x,y) for a card of (cardW×cardH) collides with:
+  //   - existing nodes (with GRID margin between them)
+  //   - existing block rects (with GRID margin)
   function overlaps(x, y) {
-    return S.nodes.some(n => {
+    const M = GRID; // minimum gap = 1 grid cell
+    // Check nodes
+    const nodeHit = S.nodes.some(n => {
       const el = document.querySelector(`[data-id="${n.id}"]`);
-      const nw = el ? Math.ceil(el.offsetWidth  / GRID) * GRID : 224;
-      const nh = el ? Math.ceil(el.offsetHeight / GRID) * GRID : 128;
-      return !(x + cardW + MARGIN <= n.x ||
-               n.x + nw + MARGIN  <= x  ||
-               y + cardH + MARGIN <= n.y ||
-               n.y + nh + MARGIN  <= y);
+      const nw = el && el.offsetWidth  > 0 ? Math.ceil(el.offsetWidth  / GRID) * GRID : (n._uw || 224);
+      const nh = el && el.offsetHeight > 0 ? Math.ceil(el.offsetHeight / GRID) * GRID : (n._uh || 128);
+      return !(x + cardW + M <= n.x || n.x + nw + M <= x ||
+               y + cardH + M <= n.y || n.y + nh + M <= y);
     });
+    if (nodeHit) return true;
+    // Check block rects
+    const blockHit = S.blocks.some(blk => {
+      const bnodes = blk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
+      if (!bnodes.length) return false;
+      let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity;
+      bnodes.forEach(n => {
+        const el = document.querySelector(`[data-id="${n.id}"]`);
+        const nw = el && el.offsetWidth  > 0 ? Math.ceil(el.offsetWidth  / GRID) * GRID : (n._uw || 224);
+        const nh = el && el.offsetHeight > 0 ? Math.ceil(el.offsetHeight / GRID) * GRID : (n._uh || 128);
+        if (n.x       < bx1) bx1 = n.x;
+        if (n.y       < by1) by1 = n.y;
+        if (n.x + nw  > bx2) bx2 = n.x + nw;
+        if (n.y + nh  > by2) by2 = n.y + nh;
+      });
+      bx1 = Math.floor(bx1 / GRID) * GRID - GRID;  // block outer edge (with PAD)
+      by1 = Math.floor(by1 / GRID) * GRID - GRID;
+      bx2 = Math.ceil(bx2  / GRID) * GRID + GRID;
+      by2 = Math.ceil(by2  / GRID) * GRID + GRID;
+      return !(x + cardW + M <= bx1 || bx2 + M <= x ||
+               y + cardH + M <= by1 || by2 + M <= y);
+    });
+    return blockHit;
   }
 
   if (!overlaps(cx, cy)) return { x: cx, y: cy };
 
-  // Spiral outward from centre until a free cell is found
-  const step = Math.max(cardW, cardH) + MARGIN;
-  for (let ring = 1; ring <= 20; ring++) {
+  // Spiral outward in GRID steps from centre until a free position is found
+  const step = Math.ceil((Math.max(cardW, cardH) + GRID) / GRID) * GRID;
+  for (let ring = 1; ring <= 30; ring++) {
     const offsets = [];
     for (let i = -ring; i <= ring; i++) {
-      offsets.push([i * step,  -ring * step]);
-      offsets.push([i * step,   ring * step]);
+      offsets.push([i * step, -ring * step]);
+      offsets.push([i * step,  ring * step]);
     }
     for (let i = -ring + 1; i < ring; i++) {
       offsets.push([-ring * step, i * step]);
       offsets.push([ ring * step, i * step]);
     }
     for (const [dx, dy] of offsets) {
-      const x = snap(Math.max(0, cx + dx));
-      const y = snap(Math.max(0, cy + dy));
+      const x = snapFloor(cx + dx);
+      const y = snapFloor(cy + dy);
       if (!overlaps(x, y)) return { x, y };
     }
   }
@@ -1027,10 +1078,10 @@ function findFreePosition(cardW, cardH) {
   // Fallback: stack below all existing nodes
   const maxY = S.nodes.reduce((m, n) => {
     const el = document.querySelector(`[data-id="${n.id}"]`);
-    const nh = el ? Math.ceil(el.offsetHeight / GRID) * GRID : 128;
-    return Math.max(m, n.y + nh + MARGIN);
+    const nh = el && el.offsetHeight > 0 ? Math.ceil(el.offsetHeight / GRID) * GRID : (n._uh || 128);
+    return Math.max(m, n.y + nh + GRID);
   }, cy);
-  return { x: cx, y: snap(maxY) };
+  return { x: cx, y: snapFloor(maxY) };
 }
 
 setInterval(() => { document.getElementById('clock').textContent = new Date().toTimeString().slice(0,8); }, 1000);
@@ -1059,6 +1110,19 @@ function applyZoom() {
   const cinner = document.getElementById('cinner');
   if (cinner) { cinner.style.width = S.canvasW + 'px'; cinner.style.height = S.canvasH + 'px'; }
   if (lbl) lbl.textContent = Math.round(S.zoom * 100) + '%';
+  // Scale grid lines with zoom so they always match card snap positions
+  const gridPx = GRID * S.zoom;
+  const cgrid = document.querySelector('.cgrid');
+  if (cgrid) {
+    cgrid.style.backgroundSize = `${gridPx}px ${gridPx}px`;
+    // Re-sync position after size change
+    const sc = document.getElementById('cscroll');
+    if (sc) {
+      const bpx = -(sc.scrollLeft % gridPx);
+      const bpy = -(sc.scrollTop  % gridPx);
+      cgrid.style.backgroundPosition = `${bpx}px ${bpy}px`;
+    }
+  }
 }
 
 /**
@@ -1430,14 +1494,18 @@ function renderBlocks() {
       if (!cb) return;
       const cr = blockRect(cb);
       if (!cr) return;
-      // Include child visual area (div + label above it)
       if (cr.x         < minX) minX = cr.x;
       if (cr.y - LBL_H < minY) minY = cr.y - LBL_H;
       if (cr.x + cr.w  > maxX) maxX = cr.x + cr.w;
       if (cr.y + cr.h  > maxY) maxY = cr.y + cr.h;
     });
     if (!isFinite(minX)) return null;
-    return { x: minX - PAD, y: minY - PAD, w: (maxX - minX) + PAD * 2, h: (maxY - minY) + PAD * 2 };
+    // Snap outer edges to GRID boundaries (floor left/top, ceil right/bottom)
+    const rx  = Math.floor((minX - PAD) / GRID) * GRID;
+    const ry  = Math.floor((minY - PAD) / GRID) * GRID;
+    const rx2 = Math.ceil( (maxX + PAD) / GRID) * GRID;
+    const ry2 = Math.ceil( (maxY + PAD) / GRID) * GRID;
+    return { x: rx, y: ry, w: rx2 - rx, h: ry2 - ry };
   }
 
   function blockDepth(blk) {
@@ -1493,6 +1561,7 @@ function renderBlocks() {
 
     div.addEventListener('mousedown', e => {
       if (e.button !== 0) return;
+      document.getElementById('cscroll').classList.add('dragging');
       if (e.target !== div) return; // let nested blocks or cards handle their own events
       e.stopPropagation(); e.preventDefault();
       function collectIds(b) {
@@ -1512,6 +1581,18 @@ function renderBlocks() {
       const anchor = nodes[0];
       S.drag = anchor; S.dragOX = mcx - anchor.x; S.dragOY = mcy - anchor.y;
       S.dragOffsets = nodes.slice(1).map(n => ({ node: n, dx: n.x - anchor.x, dy: n.y - anchor.y }));
+      S.dragLastValidX = anchor.x;
+      S.dragLastValidY = anchor.y;
+      S._dragSource = 'block';
+      S._dragBlockId = blk.id;
+      // Cache dims
+      S.nodes.forEach(node => {
+        if (!node._uw || !node._uh) {
+          const el2 = document.querySelector(`[data-id="${node.id}"]`);
+          if (el2 && el2.offsetWidth > 0) { node._uw = el2.offsetWidth; node._uh = el2.offsetHeight; }
+        }
+      });
+      document.getElementById('cscroll').classList.add('dragging');
     });
 
     inner.insertBefore(div, inner.firstChild);
@@ -2731,7 +2812,8 @@ function confirmAddRal() {
   const baseAddrNum = parseHex(baseAddr);
 
   const addedIds = [];
-  const basePos = findFreePosition(224, 128);
+  const estSize = estimateRegCardSize(regSize, bfEnabled ? _modalBitfields : []);
+  const basePos = findFreePosition(estSize.w, estSize.h);
   for (let idx = 0; idx < enumN; idx++) {
     // N-instance naming: NAME0, NAME1, NAME2... (cardinal number immediately after name, no underscore)
     const baseName  = enumEnabled ? `${name}${idx}` : name;
@@ -2761,7 +2843,7 @@ function confirmAddRal() {
     finalBitfields.sort((a, b) => b.bitStart - a.bitStart);
 
     // Place first instance at centre; subsequent instances offset to the right
-    const pos = idx === 0 ? basePos : findFreePosition(224, 128);
+    const pos = idx === 0 ? basePos : findFreePosition(estSize.w, estSize.h);
     const n = {
       id: S.nextId++, layer: 'ral',
       name: instDisplayName,
@@ -3048,16 +3130,89 @@ function renderCanvas() {
   // Draw container blocks behind cards
   renderBlocks();
 
-  // Sync cached dimensions for all visible nodes after layout
+  // Snap card dimensions and positions to GRID so all corners land on grid intersections
   requestAnimationFrame(() => {
     S.nodes.forEach(node => {
       const el = document.querySelector(`[data-id="${node.id}"]`);
-      if (el && el.offsetWidth > 0) {
-        if (!node.rotation) { node._uw = el.offsetWidth; node._uh = el.offsetHeight; }
-        else if (!node._uw)  { node._uw = el.offsetWidth; node._uh = el.offsetHeight; }
+      if (!el || el.offsetWidth === 0) return;
+
+      // offsetWidth/Height are always the UNROTATED dimensions (CSS transform doesn't change them)
+      const snappedW = Math.ceil(el.offsetWidth  / GRID) * GRID;
+      const snappedH = Math.ceil(el.offsetHeight / GRID) * GRID;
+      el.style.width     = snappedW + 'px';
+      el.style.minHeight = snappedH + 'px';
+
+      // Update cached unrotated dims
+      node._uw = snappedW;
+      node._uh = snappedH;
+
+      if (!node.rotation) {
+        // Unrotated: snap top-left directly
+        node.x = Math.round(node.x / GRID) * GRID;
+        node.y = Math.round(node.y / GRID) * GRID;
+      } else {
+        // Rotated 90°: with transform-origin 50% 50%, the visual (rendered) top-left is:
+        //   visualX = n.x + (uw - uh) / 2
+        //   visualY = n.y + (uh - uw) / 2
+        // Snap the VISUAL corner to the nearest grid intersection, then back-calculate n.x/n.y
+        const uw = snappedW, uh = snappedH;
+        const visualX = node.x + (uw - uh) / 2;
+        const visualY = node.y + (uh - uw) / 2;
+        const snappedVisualX = Math.round(visualX / GRID) * GRID;
+        const snappedVisualY = Math.round(visualY / GRID) * GRID;
+        node.x = Math.max(0, snappedVisualX - (uw - uh) / 2);
+        node.y = Math.max(0, snappedVisualY - (uh - uw) / 2);
       }
+
+      el.style.left = node.x + 'px';
+      el.style.top  = node.y + 'px';
     });
   });
+}
+
+// Find the nearest grid-aligned position to (idealX, idealY) where a rect of
+// (visW × visH) does not overlap any existing node except those in excludeIds.
+// Searches outward in a spiral of GRID steps. Returns {x, y} visual top-left.
+function findNearestFreeGridPos(idealX, idealY, visW, visH, excludeIds) {
+  const excl = new Set(excludeIds || []);
+  const M = 0; // touching edges allowed — no extra margin for rotation
+
+  function overlaps(vx, vy) {
+    return S.nodes.some(o => {
+      if (excl.has(o.id)) return false;
+      const ob = getNodeAABB(o);
+      // ob is {x,y,r,b}; candidate rect is [vx, vx+visW) × [vy, vy+visH)
+      return vx < ob.r + M && vx + visW > ob.x - M &&
+             vy < ob.b + M && vy + visH > ob.y - M;
+    });
+  }
+
+  // Snap ideal position to grid
+  const sx = Math.max(0, Math.round(idealX / GRID) * GRID);
+  const sy = Math.max(0, Math.round(idealY / GRID) * GRID);
+
+  if (!overlaps(sx, sy)) return { x: sx, y: sy };
+
+  // Spiral outward in GRID steps
+  for (let ring = 1; ring <= 40; ring++) {
+    const candidates = [];
+    for (let i = -ring; i <= ring; i++) {
+      candidates.push([i * GRID, -ring * GRID]);
+      candidates.push([i * GRID,  ring * GRID]);
+    }
+    for (let i = -ring + 1; i < ring; i++) {
+      candidates.push([-ring * GRID, i * GRID]);
+      candidates.push([ ring * GRID, i * GRID]);
+    }
+    // Sort by distance from ideal
+    candidates.sort((a, b) => (a[0]*a[0]+a[1]*a[1]) - (b[0]*b[0]+b[1]*b[1]));
+    for (const [dx, dy] of candidates) {
+      const tx = Math.max(0, sx + dx);
+      const ty = Math.max(0, sy + dy);
+      if (!overlaps(tx, ty)) return { x: tx, y: ty };
+    }
+  }
+  return { x: sx, y: sy }; // fallback
 }
 
 function makeCard(n) {
@@ -3078,38 +3233,65 @@ function makeCard(n) {
       : [n.id];
 
     if (idsToRotate.length === 1) {
-      // ── Single card: keep its own centre fixed ──
+      // ── Single card: rotate around own centre, snap visual corners to grid ──
       const rn = S.nodes.find(x => x.id === idsToRotate[0]);
       if (!rn) return;
       const el = document.querySelector(`[data-id="${rn.id}"]`);
-      if (!rn._uw || !rn._uh) {
-        rn._uw = el ? el.offsetWidth  : 224;
-        rn._uh = el ? el.offsetHeight : 120;
-      }
+      // Snap dimensions to GRID multiples
+      const rawW = el ? el.offsetWidth  : (rn._uw || 224);
+      const rawH = el ? el.offsetHeight : (rn._uh || 120);
+      rn._uw = Math.ceil(rawW / GRID) * GRID;
+      rn._uh = Math.ceil(rawH / GRID) * GRID;
       const uw = rn._uw, uh = rn._uh;
-      const cx = rn.x + uw / 2, cy = rn.y + uh / 2;
+
+      // Compute current visual top-left (accounts for existing rotation)
+      const curVisualX = rn.rotation ? rn.x + (uw - uh) / 2 : rn.x;
+      const curVisualY = rn.rotation ? rn.y + (uh - uw) / 2 : rn.y;
+      // Centre of the card in canvas coords
+      const cx = curVisualX + (rn.rotation ? uh : uw) / 2;
+      const cy = curVisualY + (rn.rotation ? uw : uh) / 2;
+
       rn.rotation = (rn.rotation || 0) === 0 ? 90 : 0;
+
+      // New visual size after rotation
+      const newVisW = rn.rotation === 90 ? uh : uw;
+      const newVisH = rn.rotation === 90 ? uw : uh;
+
+      // Ideal visual top-left (nearest grid point to rotated centre)
+      const idealVX = Math.round((cx - newVisW / 2) / GRID) * GRID;
+      const idealVY = Math.round((cy - newVisH / 2) / GRID) * GRID;
+
+      // Find nearest free position (spiral search from ideal, on GRID steps)
+      const freeVis = findNearestFreeGridPos(idealVX, idealVY, newVisW, newVisH, [rn.id]);
+
+      // Back-calculate n.x/n.y from visual corner
       if (rn.rotation === 90) {
-        rn.x = Math.max(0, Math.round((cx - uh / 2) / GRID) * GRID);
-        rn.y = Math.max(0, Math.round((cy - uw / 2) / GRID) * GRID);
+        rn.x = Math.max(0, freeVis.x - (uw - uh) / 2);
+        rn.y = Math.max(0, freeVis.y - (uh - uw) / 2);
       } else {
-        rn.x = Math.max(0, Math.round((cx - uw / 2) / GRID) * GRID);
-        rn.y = Math.max(0, Math.round((cy - uh / 2) / GRID) * GRID);
+        rn.x = Math.max(0, freeVis.x);
+        rn.y = Math.max(0, freeVis.y);
       }
+
     } else {
       // ── Group rotation: each card rotates around its own centre,
-      //    then overlaps are resolved with a minimum gap of 1 GRID ──
+      //    then collisions with external nodes are resolved ──
 
-      // 1. Collect nodes and ensure _uw/_uh are stored
+      // 1. Collect nodes and snap _uw/_uh to GRID multiples
       const nodes = idsToRotate.map(rid => {
         const rn = S.nodes.find(x => x.id === rid);
         const el = document.querySelector(`[data-id="${rid}"]`);
-        if (!rn._uw || !rn._uh) {
-          rn._uw = el ? el.offsetWidth  : 224;
-          rn._uh = el ? el.offsetHeight : 120;
-        }
+        const rawW = el ? el.offsetWidth  : (rn._uw || 224);
+        const rawH = el ? el.offsetHeight : (rn._uh || 120);
+        rn._uw = Math.ceil(rawW / GRID) * GRID;
+        rn._uh = Math.ceil(rawH / GRID) * GRID;
+        // Snap position to GRID before rotation
+        rn.x = Math.round(rn.x / GRID) * GRID;
+        rn.y = Math.round(rn.y / GRID) * GRID;
         return rn;
       }).filter(Boolean);
+
+      const rotatedIds = new Set(nodes.map(r => r.id));
 
       // 2. Determine dominant layout axis BEFORE rotation
       const aabbBefore = nodes.map(rn => getNodeAABB(rn));
@@ -3125,40 +3307,59 @@ function makeCard(n) {
         return horizontal ? (ba.x - bb.x) : (ba.y - bb.y);
       });
 
-      // 4. Rotate every card around its own centre
-      const snap = v => Math.max(0, Math.round(v / GRID) * GRID);
+      // 4. Rotate every card around its own centre, snap visual corners to grid
+      const snapG = v => Math.max(0, Math.round(v / GRID) * GRID);
       nodes.forEach(rn => {
         const uw = rn._uw, uh = rn._uh;
-        const cx = rn.x + uw / 2, cy = rn.y + uh / 2;
+        const curVisualX = rn.rotation ? rn.x + (uw - uh) / 2 : rn.x;
+        const curVisualY = rn.rotation ? rn.y + (uh - uw) / 2 : rn.y;
+        const cx = curVisualX + (rn.rotation ? uh : uw) / 2;
+        const cy = curVisualY + (rn.rotation ? uw : uh) / 2;
         rn.rotation = (rn.rotation || 0) === 0 ? 90 : 0;
         if (rn.rotation === 90) {
-          rn.x = snap(cx - uh / 2);
-          rn.y = snap(cy - uw / 2);
+          const vx = snapG(cx - uh / 2);
+          const vy = snapG(cy - uw / 2);
+          rn.x = Math.max(0, vx - (uw - uh) / 2);
+          rn.y = Math.max(0, vy - (uh - uw) / 2);
         } else {
-          rn.x = snap(cx - uw / 2);
-          rn.y = snap(cy - uh / 2);
+          rn.x = snapG(cx - uw / 2);
+          rn.y = snapG(cy - uh / 2);
         }
       });
 
-      // 5. Resolve overlaps along the dominant axis.
-      //    Sweep from first to last in sort order: if a card overlaps the
-      //    previous one, push it forward by multiples of GRID until clear.
+      // 5. Resolve intra-group overlaps along dominant axis
       for (let i = 1; i < sorted.length; i++) {
         const prev = sorted[i - 1];
         const cur  = sorted[i];
-        let iterations = 0;
-        while (iterations++ < 400) {
-          const pa = getNodeAABB(prev);
-          const ca = getNodeAABB(cur);
-          // Check overlap (strict — touching edges are fine)
-          const overlapX = pa.r > ca.x && ca.r > pa.x;
-          const overlapY = pa.b > ca.y && ca.b > pa.y;
-          if (!overlapX || !overlapY) break; // no overlap — done
-          // Push cur forward by 1 GRID along the dominant axis
-          if (horizontal) cur.x = snap(cur.x + GRID);
-          else            cur.y = snap(cur.y + GRID);
+        let iter = 0;
+        while (iter++ < 400) {
+          const pa = getNodeAABB(prev), ca = getNodeAABB(cur);
+          if (!(pa.r > ca.x && ca.r > pa.x && pa.b > ca.y && ca.b > pa.y)) break;
+          if (horizontal) cur.x = snapG(cur.x + GRID);
+          else            cur.y = snapG(cur.y + GRID);
         }
       }
+
+      // 6. Resolve collisions of each rotated node against external (non-rotated) nodes
+      nodes.forEach(rn => {
+        const uw = rn._uw, uh = rn._uh;
+        const newVisW = rn.rotation === 90 ? uh : uw;
+        const newVisH = rn.rotation === 90 ? uw : uh;
+        const curVX = rn.rotation === 90 ? rn.x + (uw - uh) / 2 : rn.x;
+        const curVY = rn.rotation === 90 ? rn.y + (uh - uw) / 2 : rn.y;
+        const freeVis = findNearestFreeGridPos(
+          Math.max(0, curVX), Math.max(0, curVY),
+          newVisW, newVisH,
+          [...rotatedIds]
+        );
+        if (rn.rotation === 90) {
+          rn.x = Math.max(0, freeVis.x - (uw - uh) / 2);
+          rn.y = Math.max(0, freeVis.y - (uh - uw) / 2);
+        } else {
+          rn.x = Math.max(0, freeVis.x);
+          rn.y = Math.max(0, freeVis.y);
+        }
+      });
     }
 
     renderCanvas();
@@ -3183,6 +3384,8 @@ function makeCard(n) {
   card.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
     e.preventDefault();
+    // Show move cursor immediately on mousedown (removed on mouseup)
+    document.getElementById('cscroll').classList.add('dragging');
 
     if (e.ctrlKey || e.metaKey) {
       select(n.id, true);
@@ -3203,9 +3406,9 @@ function makeCard(n) {
     S.drag   = n;
     S.dragOX = mouseCanvasX - n.x;
     S.dragOY = mouseCanvasY - n.y;
-    // Track last collision-free position for hard-stop collision
     S.dragLastValidX = n.x;
     S.dragLastValidY = n.y;
+    S._dragSource = 'card';
 
     // Cache real dimensions for ALL nodes before drag starts so resolveOverlap uses correct sizes
     S.nodes.forEach(node => {
@@ -3309,57 +3512,44 @@ function resolveOverlap(dragNode, nx, ny, excludeIds) {
 // A block's "content area" is the rect of its currently-still-member nodes (before updating).
 // Rule: a node belongs to a block if its AABB centre falls inside the block's padded bounding rect.
 function updateBlockMembership(movedIds) {
+  // Called at mouseup — final membership reconciliation after drag ends.
   if (!S.blocks.length || !movedIds.length) return;
-
   const PAD = GRID;
-
-  // Compute the bounding rect of a block using only nodes NOT in movedIds
-  // (i.e. the "frozen" rect — other members that didn't move define the box)
-  function frozenRect(blk) {
-    const staticIds = blk.nodeIds.filter(id => !movedIds.includes(id));
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    staticIds.forEach(id => {
-      const n = S.nodes.find(x => x.id === id);
-      if (!n) return;
-      const bb = getNodeAABB(n);
-      if (bb.x < minX) minX = bb.x; if (bb.y < minY) minY = bb.y;
-      if (bb.r > maxX) maxX = bb.r; if (bb.b > maxY) maxY = bb.b;
-    });
-    if (!isFinite(minX)) return null;
-    return { x: minX - PAD, y: minY - PAD, r: maxX + PAD, b: maxY + PAD };
-  }
 
   movedIds.forEach(nodeId => {
     const n = S.nodes.find(x => x.id === nodeId);
     if (!n) return;
     const bb = getNodeAABB(n);
-    const cx = (bb.x + bb.r) / 2;
-    const cy = (bb.y + bb.b) / 2;
+    const cx = (bb.x + bb.r) / 2, cy = (bb.y + bb.b) / 2;
 
     S.blocks.forEach(blk => {
-      const wasInside = blk.nodeIds.includes(nodeId);
-      const fr = frozenRect(blk);
+      // Build frozen rect from members that are NOT being moved
+      const staticIds = blk.nodeIds.filter(id => !movedIds.includes(id));
+      if (staticIds.length === 0) return; // whole block moved — no change
 
-      if (fr) {
-        // Node is "inside" if its centre is within the frozen rect
-        const isInside = cx >= fr.x && cx <= fr.r && cy >= fr.y && cy <= fr.b;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      staticIds.forEach(id => {
+        const n2 = S.nodes.find(x => x.id === id);
+        if (!n2) return;
+        const bb2 = getNodeAABB(n2);
+        if (bb2.x < minX) minX = bb2.x; if (bb2.y < minY) minY = bb2.y;
+        if (bb2.r > maxX) maxX = bb2.r; if (bb2.b > maxY) maxY = bb2.b;
+      });
+      if (!isFinite(minX)) return;
 
-        if (wasInside && !isInside) {
-          // ── Exiting: remove from block ──
-          blk.nodeIds = blk.nodeIds.filter(id => id !== nodeId);
-        } else if (!wasInside && isInside) {
-          // ── Entering: add to block ──
-          blk.nodeIds = [...blk.nodeIds, nodeId];
-        }
-      } else if (wasInside) {
-        // Frozen rect is empty (all members moved) — keep current membership unchanged
-        // (the block just follows all its members)
+      const fr = { x: minX - PAD, y: minY - PAD, r: maxX + PAD, b: maxY + PAD };
+      const wasInside  = blk.nodeIds.includes(nodeId);
+      const isInsideNow = cx >= fr.x && cx <= fr.r && cy >= fr.y && cy <= fr.b;
+
+      if (wasInside && !isInsideNow) {
+        blk.nodeIds = blk.nodeIds.filter(id => id !== nodeId);
+      } else if (!wasInside && isInsideNow) {
+        blk.nodeIds = [...blk.nodeIds, nodeId];
       }
     });
   });
 
-  // Clean up: remove blocks with fewer than 1 remaining node
-  S.blocks = S.blocks.filter(blk => blk.nodeIds.filter(id => S.nodes.find(n => n.id === id)).length > 0);
+  S.blocks = S.blocks.filter(blk => blk.nodeIds.some(id => S.nodes.find(n => n.id === id)));
 }
 
 document.addEventListener('mousemove', e => {
@@ -3378,62 +3568,97 @@ document.addEventListener('mousemove', e => {
     let ny = Math.max(0, (e.clientY - r.top  + sc.scrollTop)  / S.zoom - S.dragOY);
     nx = snapVal(nx); ny = snapVal(ny);
 
-    if (S.dragOffsets.length > 0) {
-      // ── Multi-drag: rigid group, last-valid-position approach ──
-      const draggedIds = new Set([S.drag.id, ...S.dragOffsets.map(o => o.node.id)]);
-      const statics = S.nodes.filter(n => !draggedIds.has(n.id));
+    const PAD = GRID;
+    const isBlockDrag = S._dragSource === 'block';
+    const isCardDrag  = S._dragSource === 'card';
+    const isGroupDrag = S.dragOffsets.length > 0;
+    const draggedIds  = new Set([S.drag.id, ...S.dragOffsets.map(o => o.node.id)]);
 
-      // Build candidate positions for the whole group
-      const group = [
-        { node: S.drag, cx: nx, cy: ny },
-        ...S.dragOffsets.map(({ node, dx, dy }) => ({
-          node,
-          cx: snapVal(Math.max(0, nx + dx)),
-          cy: snapVal(Math.max(0, ny + dy))
-        }))
-      ];
-
-      // Check if ANY node in the group overlaps ANY static node at proposed positions
-      let hasOverlap = false;
-      outer: for (const { node, cx, cy } of group) {
-        const dr = getCardAABB(node, cx, cy);
-        for (const o of statics) {
-          const or = getCardAABB(o);
-          if (or && rectsOverlap(dr, or)) { hasOverlap = true; break outer; }
-        }
-      }
-
-      if (!hasOverlap) {
-        // No collision — accept new position and update last-valid
-        S.drag.x = Math.max(0, nx);
-        S.drag.y = Math.max(0, ny);
-        S.dragOffsets.forEach(({ node, dx, dy }) => {
-          node.x = Math.max(0, snapVal(nx + dx));
-          node.y = Math.max(0, snapVal(ny + dy));
-        });
-        S.dragLastValidX = nx;
-        S.dragLastValidY = ny;
-      }
-      // else: keep everyone at last-valid position (no move)
-
-    } else {
-      // ── Single drag: last-valid-position ──
-      const excluded = new Set([S.drag.id]);
-      const statics = S.nodes.filter(n => !excluded.has(n.id));
-      const dr = getCardAABB(S.drag, nx, ny);
-      const hasOverlap = statics.some(o => {
-        const or = getCardAABB(o);
-        return or && rectsOverlap(dr, or);
+    // ── Helper: compute frozen rect of a block (nodes not in draggedIds) ──
+    function frozenRect(blk) {
+      const staticIds = blk.nodeIds.filter(id => !draggedIds.has(id));
+      if (!staticIds.length) return null;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      staticIds.forEach(id => {
+        const n2 = S.nodes.find(x => x.id === id);
+        if (!n2) return;
+        const bb2 = getNodeAABB(n2);
+        if (bb2.x < minX) minX = bb2.x; if (bb2.y < minY) minY = bb2.y;
+        if (bb2.r > maxX) maxX = bb2.r; if (bb2.b > maxY) maxY = bb2.b;
       });
-
-      if (!hasOverlap) {
-        S.drag.x = nx;
-        S.drag.y = ny;
-        S.dragLastValidX = nx;
-        S.dragLastValidY = ny;
-      }
-      // else: stay at last-valid (card doesn't move)
+      if (!isFinite(minX)) return null;
+      return { x: minX - PAD, y: minY - PAD, r: maxX + PAD, b: maxY + PAD };
     }
+
+    // ── Candidate positions ──
+    const candidates = [
+      { node: S.drag, cx: nx, cy: ny },
+      ...S.dragOffsets.map(({ node, dx, dy }) => ({
+        node, cx: snapVal(Math.max(0, nx + dx)), cy: snapVal(Math.max(0, ny + dy))
+      }))
+    ];
+
+    // ── Build obstacle set ──
+    // BLOCK drag: obstacles = all nodes NOT in this block (and not in child blocks).
+    //             Other blocks' nodes ARE obstacles. Cards outside are obstacles.
+    // CARD drag:  obstacles = all nodes NOT in the same block as this card.
+    //             Co-members of the card's current block are NOT obstacles (free movement inside).
+    let obstacleIds;
+    if (isBlockDrag) {
+      // All nodes not being dragged are obstacles
+      obstacleIds = new Set(S.nodes.filter(n => !draggedIds.has(n.id)).map(n => n.id));
+    } else {
+      // Card drag: co-members of home block are not obstacles
+      const homeIds = new Set();
+      S.blocks.forEach(blk => {
+        if (blk.nodeIds.includes(S.drag.id)) blk.nodeIds.forEach(id => homeIds.add(id));
+      });
+      obstacleIds = new Set(S.nodes.filter(n => !draggedIds.has(n.id) && !homeIds.has(n.id)).map(n => n.id));
+    }
+    const obstacles = S.nodes.filter(n => obstacleIds.has(n.id));
+
+    // ── Collision check ──
+    let hasOverlap = false;
+    outer: for (const { node, cx, cy } of candidates) {
+      const dr = getCardAABB(node, cx, cy);
+      for (const o of obstacles) {
+        const or = getCardAABB(o);
+        if (or && rectsOverlap(dr, or)) { hasOverlap = true; break outer; }
+      }
+    }
+
+    if (!hasOverlap) {
+      // ── Accept position ──
+      S.drag.x = Math.max(0, nx);
+      S.drag.y = Math.max(0, ny);
+      S.dragOffsets.forEach(({ node, dx, dy }) => {
+        node.x = Math.max(0, snapVal(nx + dx));
+        node.y = Math.max(0, snapVal(ny + dy));
+      });
+      S.dragLastValidX = nx;
+      S.dragLastValidY = ny;
+
+      // ── Live membership: only for single card drag ──
+      if (isCardDrag && !isGroupDrag) {
+        const nodeId = S.drag.id;
+        const bb = getNodeAABB(S.drag);
+        const mcx = (bb.x + bb.r) / 2, mcy = (bb.y + bb.b) / 2;
+
+        S.blocks.forEach(blk => {
+          const wasInside = blk.nodeIds.includes(nodeId);
+          const fr = frozenRect(blk);
+          if (!fr) return; // whole block is moving, no change
+          const isInsideNow = mcx >= fr.x && mcx <= fr.r && mcy >= fr.y && mcy <= fr.b;
+          if (wasInside && !isInsideNow) {
+            blk.nodeIds = blk.nodeIds.filter(id => id !== nodeId);
+          } else if (!wasInside && isInsideNow) {
+            blk.nodeIds = [...blk.nodeIds, nodeId];
+          }
+        });
+      }
+    }
+    // else: hard stop
+
     expandCanvasIfNeeded();
     renderCanvas();
     return;
@@ -3485,9 +3710,11 @@ document.addEventListener('mouseup', e => {
     sc.classList.remove('pan-active');
     if (S.ctrlDown) sc.classList.add('pan-ready');
     else sc.classList.remove('pan-ready');
+    document.getElementById('cscroll').classList.remove('dragging');
     return;
   }
-  S.drag = null; S.dragOffsets = [];
+  document.getElementById('cscroll').classList.remove('dragging');
+  S.drag = null; S.dragOffsets = []; S._dragSource = null; S._dragBlockId = null;
   sc.classList.remove('rubber-sel');
   expandCanvasIfNeeded();
 
@@ -4113,13 +4340,11 @@ function setView(btn) {
 }
 
 function toggleSnap(btn) {
-  S.snapEnabled = !S.snapEnabled;
-  btn.classList.toggle('snap-on', S.snapEnabled);
-  status(S.snapEnabled ? 'Snap to grid: ON' : 'Snap to grid: OFF');
+  // Snap to grid is always active and cannot be disabled
 }
 
 function snapVal(v) {
-  return S.snapEnabled ? Math.round(v / GRID) * GRID : v;
+  return Math.round(v / GRID) * GRID;
 }
 
 
@@ -4316,7 +4541,7 @@ function parseYAML(text) {
   text.split('\n').forEach(line=>{
     if(/^mal:/.test(line)){sec='mal';return;} if(/^ral:/.test(line)){sec='ral';return;} if(!sec)return;
     const nm=line.match(/^\s+-\s+name:\s*(.+)/);
-    if(nm){cur={id:S.nextId++,layer:sec,name:nm[1].trim(),type:sec==='mal'?'segment':'register',segAddr:'0x00000000',segSize:0,segDefault:'0x00',desc:'',x:48+Math.random()*320,y:48+Math.random()*200};S.nodes.push(cur);return;}
+    if(nm){const fp=findFreePosition(224,128);cur={id:S.nextId++,layer:sec,name:nm[1].trim(),type:sec==='mal'?'segment':'register',segAddr:'0x00000000',segSize:0,segDefault:'0x00',desc:'',x:fp.x,y:fp.y};S.nodes.push(cur);return;}
     if(!cur)return;
     const tm=line.match(/^\s+type:\s*(.+)/); if(tm){cur.type=tm[1].trim();return;}
     const dm=line.match(/^\s+desc:\s*"?([^"]*)"?/); if(dm)cur.desc=dm[1].trim();
@@ -4726,6 +4951,18 @@ function pickFileWithName(accept, cb) { const i=document.createElement('input');
 
 document.addEventListener('DOMContentLoaded', () => {
   const cscroll = document.getElementById('cscroll');
+
+  // ── Sync grid position with scroll/pan ──
+  function updateGridPosition() {
+    const cgrid = document.querySelector('.cgrid');
+    if (!cgrid) return;
+    const gridPx = GRID * S.zoom;
+    // Negate scroll so the grid appears to move with the canvas content
+    const bpx = -(cscroll.scrollLeft % gridPx);
+    const bpy = -(cscroll.scrollTop  % gridPx);
+    cgrid.style.backgroundPosition = `${bpx}px ${bpy}px`;
+  }
+  cscroll.addEventListener('scroll', updateGridPosition);
   document.addEventListener('keydown', e=>{
     if(e.key==='Escape') {
       document.activeElement?.blur();
