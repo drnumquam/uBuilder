@@ -360,6 +360,7 @@ body {
   user-select: none;
   box-sizing: border-box;
   cursor: default;
+  z-index: 500;
   /* Height is always content-driven; outline (not border) used for selection so height never changes */
 }
 .ub-card.ral-card {
@@ -409,6 +410,53 @@ body {
   border: 1px solid var(--cyan); background: #4fc3f718;
   display: none;
 }
+
+/* Canvas container blocks */
+.canvas-block {
+  position: absolute;
+  background: #1a1c2a;
+  border: 3px solid #6b8aff;
+  border-radius: 8px;
+  pointer-events: auto;
+  z-index: 0;
+  box-sizing: border-box;
+  cursor: move;
+}
+.canvas-block-label {
+  position: absolute;
+  font-family: var(--font-code);
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b8aff;
+  background: #1a1c2a;
+  padding: 2px 8px;
+  border-radius: 4px 4px 0 0;
+  border: 3px solid #6b8aff;
+  border-bottom: none;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Group / Ungroup tree buttons — same layout as .tree-add */
+.tree-block-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 8px; border-radius: var(--radius);
+  cursor: pointer; font-size: 11px; font-weight: 600;
+  color: #fff; background: #c05000;
+  border: 1px solid #e06010;
+  transition: background 0.1s; margin: 3px 4px;
+}
+.tree-block-btn:hover { background: #e07020; }
+.tree-ungroup-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 8px; border-radius: var(--radius);
+  cursor: pointer; font-size: 11px; font-weight: 600;
+  color: #fff; background: #5a3080;
+  border: 1px solid #7a50a0;
+  transition: background 0.1s; margin: 3px 4px;
+}
+.tree-ungroup-btn:hover { background: #7a50a0; }
 
 .ch { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; user-select: none; }
 .card-edit-btn {
@@ -580,6 +628,7 @@ body {
   <div id="left">
     <div class="panel-hdr">Project Tree</div>
     <div class="tree-wrap">
+      <div id="block-btns"></div>
       <div class="tree-sec">
         <div class="tree-sec-hdr mal open" onclick="toggleSec(this,'mal-items')">
           <span class="chevron">▶</span> MAL
@@ -921,7 +970,7 @@ body {
 
 <script>
 const GRID = 32;
-const S = { project:'untitled', nodes:[], selected:null, multiSel:new Set(), nextId:1, adding:null, editing:null, drag:null, dragOX:0, dragOY:0, dragOffsets:[], snapEnabled:true, view:'design', rubber:null, zoom:1, pan:null, ctrlDown:false };
+const S = { project:'untitled', nodes:[], blocks:[], selected:null, selectedBlock:null, multiSel:new Set(), nextId:1, nextBlockId:1, adding:null, editing:null, drag:null, dragOX:0, dragOY:0, dragOffsets:[], snapEnabled:true, view:'design', rubber:null, zoom:1, pan:null, ctrlDown:false };
 const RAL_TYPES = ['register','bitfield','register_group','peripheral_block'];
 
 /* ── Find a free position at the centre of the visible canvas, avoiding collisions ── */
@@ -1161,10 +1210,27 @@ function toggleSec(hdr, id) { hdr.classList.toggle('open'); document.getElementB
 function renderTree() {
   const me = document.getElementById('mal-items');
   const re = document.getElementById('ral-items');
+  const bb = document.getElementById('block-btns');
+
+  // ── Group / Ungroup buttons — always above MAL section ──
+  bb.innerHTML = '';
+  if (S.multiSel.size > 1) {
+    const groupBtn = document.createElement('div');
+    groupBtn.className = 'tree-block-btn';
+    groupBtn.innerHTML = '⬡ Group...';
+    groupBtn.onclick = openPutInBlock;
+    bb.appendChild(groupBtn);
+  }
+  if (S.selectedBlock !== null) {
+    const ungroupBtn = document.createElement('div');
+    ungroupBtn.className = 'tree-ungroup-btn';
+    ungroupBtn.innerHTML = '⬡ Ungroup';
+    ungroupBtn.onclick = ungroupSelectedBlock;
+    bb.appendChild(ungroupBtn);
+  }
 
   // ── RAL: flat list ──
   re.innerHTML = '<div class="tree-add ral" onclick="openAdd(\'ral\')">＋ Add register...</div>';
-  // Show "Copy from register..." only when a RAL node is selected — placed right after "Add register"
   if (S.selected !== null && S.nodes.find(n => n.id === S.selected && n.layer === 'ral')) {
     const copyBtn = document.createElement('div');
     copyBtn.className = 'tree-add ral';
@@ -1181,9 +1247,8 @@ function renderTree() {
     re.appendChild(d);
   });
 
-  // ── MAL: grouped by memory type, order follows S.nodes (= address order after sort) ──
+  // ── MAL: grouped by memory type ──
   me.innerHTML = '<div class="tree-add" onclick="openAdd(\'mal\')">＋ Add segment...</div>';
-  // Show "Copy from segment..." only when a MAL node is selected — placed right after "Add segment"
   if (S.selected !== null && S.nodes.find(n => n.id === S.selected && n.layer === 'mal')) {
     const copyBtn = document.createElement('div');
     copyBtn.className = 'tree-add';
@@ -1191,6 +1256,7 @@ function renderTree() {
     copyBtn.onclick = () => openCopyFrom('mal');
     me.appendChild(copyBtn);
   }
+
   const malNodes = S.nodes.filter(n => n.layer === 'mal');
 
   // Groups appear in the order their first member appears in S.nodes
@@ -1229,6 +1295,235 @@ function renderTree() {
 
     me.appendChild(grpHdr);
     me.appendChild(grpItems);
+  });
+}
+
+// ── Block container functions ──
+
+function selectBlock(blockId) {
+  S.selectedBlock = (S.selectedBlock === blockId) ? null : blockId;
+  S.selected = null;
+  S.multiSel.clear();
+  renderTree();
+  renderCanvas();
+}
+
+function ungroupSelectedBlock() {
+  if (S.selectedBlock === null) return;
+  const blk = S.blocks.find(b => b.id === S.selectedBlock);
+  if (!blk) { S.selectedBlock = null; return; }
+
+  // Find if this block is a child of any parent block
+  const parent = S.blocks.find(b => (b.childBlockIds || []).includes(blk.id));
+
+  if (parent) {
+    // Re-assign child blocks of the removed block to the parent
+    parent.childBlockIds = [
+      ...(parent.childBlockIds || []).filter(id => id !== blk.id),
+      ...(blk.childBlockIds || [])
+    ];
+    // nodeIds of removed block are already a subset of parent's nodeIds — no change needed
+  }
+  // If no parent, direct child blocks become top-level (no action needed)
+
+  // Remove the block
+  S.blocks = S.blocks.filter(b => b.id !== blk.id);
+  S.selectedBlock = parent ? parent.id : null;
+  renderTree();
+  renderCanvas();
+  status(`Block "${blk.name}" ungrouped`);
+}
+
+function openPutInBlock() {
+  if (S.multiSel.size < 2) return;
+  document.getElementById('block-name-input').value = '';
+  document.getElementById('block-name-err').textContent = '';
+  document.getElementById('block-sel-count').textContent = S.multiSel.size;
+  document.getElementById('modal-put-block').classList.add('open');
+  setTimeout(() => document.getElementById('block-name-input').focus(), 80);
+}
+
+function confirmPutInBlock() {
+  const raw = document.getElementById('block-name-input').value.trim().toUpperCase();
+  const name = raw.replace(/[^A-Z0-9_]/g, '');
+  if (!name) {
+    document.getElementById('block-name-err').textContent = 'Block name is required';
+    document.getElementById('block-name-input').focus();
+    return;
+  }
+  if (/^[0-9]/.test(name)) {
+    document.getElementById('block-name-err').textContent = 'Name must start with a letter or underscore, not a digit';
+    document.getElementById('block-name-input').focus();
+    return;
+  }
+  if (S.blocks.some(b => b.name === name)) {
+    document.getElementById('block-name-err').textContent = `Block "${name}" already exists`;
+    document.getElementById('block-name-input').focus();
+    return;
+  }
+
+  const selectedIds = new Set(S.multiSel);
+
+  // Helper: all node ids reachable from a block (recursively)
+  function allNodeIds(blk) {
+    const ids = new Set(blk.nodeIds);
+    (blk.childBlockIds || []).forEach(cid => {
+      const cb = S.blocks.find(b => b.id === cid);
+      if (cb) allNodeIds(cb).forEach(id => ids.add(id));
+    });
+    return ids;
+  }
+
+  // Helper: is blkId a descendant of any block in the candidates list?
+  function isDescendantOfAny(blkId, candidates) {
+    return candidates.some(cid => {
+      const cb = S.blocks.find(b => b.id === cid);
+      if (!cb) return false;
+      return (cb.childBlockIds || []).includes(blkId) ||
+             isDescendantOfAny(blkId, cb.childBlockIds || []);
+    });
+  }
+
+  // A block becomes a direct child of the new block if ALL its nodes are selected
+  const directChildIds = [];
+  S.blocks.forEach(blk => {
+    const nodeSet = allNodeIds(blk);
+    const allSelected = [...nodeSet].every(id => selectedIds.has(id));
+    if (allSelected && !isDescendantOfAny(blk.id, directChildIds)) {
+      directChildIds.push(blk.id);
+      nodeSet.forEach(id => selectedIds.add(id));
+    }
+  });
+
+  const nodeIds = [...selectedIds];
+  S.blocks.push({ id: S.nextBlockId++, name, nodeIds, childBlockIds: directChildIds });
+  S.multiSel.clear();
+  S.selected = null;
+  closeModal('modal-put-block');
+  // Double rAF: first frame closes the modal, second frame re-renders with cleared state
+  requestAnimationFrame(() => requestAnimationFrame(() => { renderTree(); renderCanvas(); }));
+  const msg = directChildIds.length
+    ? `Block "${name}" created with ${nodeIds.length} card${nodeIds.length !== 1 ? 's' : ''} and ${directChildIds.length} nested block${directChildIds.length !== 1 ? 's' : ''}`
+    : `Block "${name}" created with ${nodeIds.length} card${nodeIds.length !== 1 ? 's' : ''}`;
+  status(msg);
+}
+
+function renderBlocks() {
+  const inner = document.getElementById('cinner');
+  const PAD   = GRID;
+  const LBL_H = 22;
+
+  inner.querySelectorAll('.canvas-block,.canvas-block-label').forEach(el => el.remove());
+
+  // Physical rect of a block: accounts for own PAD and child blocks' physical rects
+  function blockRect(blk) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    blk.nodeIds.forEach(id => {
+      const n = S.nodes.find(x => x.id === id);
+      if (!n) return;
+      const bb = getNodeAABB(n);
+      if (bb.x < minX) minX = bb.x; if (bb.y < minY) minY = bb.y;
+      if (bb.r > maxX) maxX = bb.r; if (bb.b > maxY) maxY = bb.b;
+    });
+    (blk.childBlockIds || []).forEach(cid => {
+      const cb = S.blocks.find(b => b.id === cid);
+      if (!cb) return;
+      const cr = blockRect(cb);
+      if (!cr) return;
+      // Include child visual area (div + label above it)
+      if (cr.x         < minX) minX = cr.x;
+      if (cr.y - LBL_H < minY) minY = cr.y - LBL_H;
+      if (cr.x + cr.w  > maxX) maxX = cr.x + cr.w;
+      if (cr.y + cr.h  > maxY) maxY = cr.y + cr.h;
+    });
+    if (!isFinite(minX)) return null;
+    return { x: minX - PAD, y: minY - PAD, w: (maxX - minX) + PAD * 2, h: (maxY - minY) + PAD * 2 };
+  }
+
+  function blockDepth(blk) {
+    if (!blk.childBlockIds || blk.childBlockIds.length === 0) return 0;
+    return 1 + Math.max(...blk.childBlockIds.map(cid => {
+      const cb = S.blocks.find(b => b.id === cid);
+      return cb ? blockDepth(cb) : 0;
+    }));
+  }
+
+  // Draw leaves first (depth 0), parents last — so parents' insertBefore pushes them before leaves in DOM
+  const sorted = [...S.blocks].sort((a, b) => blockDepth(a) - blockDepth(b));
+
+  // Total depth levels — used to invert z-index (leaves highest)
+  const maxDepth = S.blocks.reduce((m, b) => Math.max(m, blockDepth(b)), 0);
+
+  function depthStyle(depth) {
+    // Deeper nesting = more saturated border, but background always semi-transparent
+    const borders = ['#6b8aff','#4a6adf','#2a50bf','#1a409f'];
+    const bgs     = ['rgba(26,28,42,0.55)','rgba(22,24,40,0.55)','rgba(18,21,38,0.55)','rgba(14,18,36,0.55)'];
+    const d = Math.min(depth, borders.length - 1);
+    return { border: borders[d], bg: bgs[d] };
+  }
+
+  sorted.forEach(blk => {
+    const rect = blockRect(blk);
+    if (!rect) return;
+    const depth = blockDepth(blk);
+    const { border: borderColor, bg: bgColor } = depthStyle(depth);
+    // Invert: leaf blocks (depth=0) get highest z-index among blocks,
+    // parent blocks get lower z-index so children are always visible above them.
+    // Cards (.ub-card) get z-index 500 (set in renderCanvas) to always stay on top of all blocks.
+    const zIdx = (maxDepth - depth) + 1;  // leaf=maxDepth+1-0=highest, root=1
+
+    const div = document.createElement('div');
+    div.className = 'canvas-block';
+    div.dataset.blockId = blk.id;
+    div.style.left        = rect.x + 'px';
+    div.style.top         = (rect.y + LBL_H) + 'px';
+    div.style.width       = rect.w + 'px';
+    div.style.height      = Math.max(0, rect.h - LBL_H) + 'px';
+    const isSelected = S.selectedBlock === blk.id;
+    div.style.borderColor = isSelected ? '#ffffff' : borderColor;
+    div.style.background  = bgColor;
+    div.style.zIndex      = zIdx;
+    if (isSelected) div.style.boxShadow = '0 0 0 3px #ffffff40';
+
+    div.addEventListener('click', e => {
+      if (e.target !== div) return;
+      e.stopPropagation();
+      selectBlock(blk.id);
+    });
+
+    div.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      if (e.target !== div) return; // let nested blocks or cards handle their own events
+      e.stopPropagation(); e.preventDefault();
+      function collectIds(b) {
+        const ids = new Set(b.nodeIds);
+        (b.childBlockIds || []).forEach(cid => {
+          const cb = S.blocks.find(x => x.id === cid);
+          if (cb) collectIds(cb).forEach(id => ids.add(id));
+        });
+        return ids;
+      }
+      const nodes = [...collectIds(blk)].map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
+      if (!nodes.length) return;
+      const sc = document.getElementById('cscroll');
+      const r2 = sc.getBoundingClientRect();
+      const mcx = (e.clientX - r2.left + sc.scrollLeft) / S.zoom;
+      const mcy = (e.clientY - r2.top  + sc.scrollTop)  / S.zoom;
+      const anchor = nodes[0];
+      S.drag = anchor; S.dragOX = mcx - anchor.x; S.dragOY = mcy - anchor.y;
+      S.dragOffsets = nodes.slice(1).map(n => ({ node: n, dx: n.x - anchor.x, dy: n.y - anchor.y }));
+    });
+
+    inner.insertBefore(div, inner.firstChild);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'canvas-block-label';
+    lbl.style.left = (rect.x + 10) + 'px';
+    lbl.style.top  = rect.y + 'px';
+    lbl.style.color = borderColor; lbl.style.borderColor = borderColor; lbl.style.background = bgColor;
+    lbl.style.zIndex = zIdx;
+    lbl.textContent = blk.name;
+    inner.insertBefore(lbl, div.nextSibling);
   });
 }
 
@@ -1488,7 +1783,7 @@ function closeModal(id) {
     if (id === 'modal-ral') document.querySelector('#modal-ral .mhdr span').textContent = 'Add RAL Register';
     return;
   }
-  ['modal-mal','modal-ral','modal-save','modal-edit-mal','modal-edit-ral','modal-bf-editor'].forEach(mid => {
+  ['modal-mal','modal-ral','modal-save','modal-edit-mal','modal-edit-ral','modal-bf-editor','modal-put-block'].forEach(mid => {
     const el = document.getElementById(mid);
     if (el) el.classList.remove('open');
   });
@@ -2539,7 +2834,6 @@ function renderCanvas() {
 
   // Remove old group labels
   inner.querySelectorAll('.canvas-group-lbl').forEach(l => l.remove());
-
   visibleNodes.forEach(n => {
     let card = inner.querySelector(`[data-id="${n.id}"]`);
     if (!card) { card = makeCard(n); inner.appendChild(card); }
@@ -2549,6 +2843,9 @@ function renderCanvas() {
     card.style.transformOrigin = '50% 50%';
     // Clear any previously forced height so content drives it, then snap once via CSS
     card.style.minHeight = '';
+    // Dragged card(s) always render above all others
+    const isDragged = S.drag && (S.drag.id === n.id || S.dragOffsets.some(o => o.node.id === n.id));
+    card.style.zIndex = isDragged ? '600' : '';
     const isMal = n.layer==='mal';
     const mtClass = isMal
       ? (n.memType ? ' mt-' + n.memType : '')
@@ -2747,6 +3044,20 @@ function renderCanvas() {
       inner.insertBefore(lbl, inner.firstChild);
     });
   }
+
+  // Draw container blocks behind cards
+  renderBlocks();
+
+  // Sync cached dimensions for all visible nodes after layout
+  requestAnimationFrame(() => {
+    S.nodes.forEach(node => {
+      const el = document.querySelector(`[data-id="${node.id}"]`);
+      if (el && el.offsetWidth > 0) {
+        if (!node.rotation) { node._uw = el.offsetWidth; node._uh = el.offsetHeight; }
+        else if (!node._uw)  { node._uw = el.offsetWidth; node._uh = el.offsetHeight; }
+      }
+    });
+  });
 }
 
 function makeCard(n) {
@@ -2786,7 +3097,8 @@ function makeCard(n) {
         rn.y = Math.max(0, Math.round((cy - uh / 2) / GRID) * GRID);
       }
     } else {
-      // ── Group rotation: preserve edge-to-edge gaps ──
+      // ── Group rotation: each card rotates around its own centre,
+      //    then overlaps are resolved with a minimum gap of 1 GRID ──
 
       // 1. Collect nodes and ensure _uw/_uh are stored
       const nodes = idsToRotate.map(rid => {
@@ -2799,64 +3111,52 @@ function makeCard(n) {
         return rn;
       }).filter(Boolean);
 
-      // 2. Compute AABB of each node BEFORE rotation
+      // 2. Determine dominant layout axis BEFORE rotation
       const aabbBefore = nodes.map(rn => getNodeAABB(rn));
-
-      // 3. Determine dominant layout axis: compare total x-span vs y-span
       const minX = Math.min(...aabbBefore.map(b => b.x));
       const maxX = Math.max(...aabbBefore.map(b => b.r));
       const minY = Math.min(...aabbBefore.map(b => b.y));
       const maxY = Math.max(...aabbBefore.map(b => b.b));
       const horizontal = (maxX - minX) >= (maxY - minY);
 
-      // 4. Sort nodes along the dominant axis
+      // 3. Sort nodes along dominant axis (determines push order)
       const sorted = [...nodes].sort((a, b) => {
         const ba = getNodeAABB(a), bb = getNodeAABB(b);
         return horizontal ? (ba.x - bb.x) : (ba.y - bb.y);
       });
-      const sortedAABB = sorted.map(rn => getNodeAABB(rn));
 
-      // 5. Compute gaps between consecutive cards (edge-to-edge along dominant axis)
-      const gaps = [];
-      for (let i = 0; i < sorted.length - 1; i++) {
-        const gap = horizontal
-          ? sortedAABB[i + 1].x - sortedAABB[i].r   // gap in X
-          : sortedAABB[i + 1].y - sortedAABB[i].b;  // gap in Y
-        gaps.push(gap);
-      }
-
-      // 6. Rotate every card keeping its own centre fixed
+      // 4. Rotate every card around its own centre
+      const snap = v => Math.max(0, Math.round(v / GRID) * GRID);
       nodes.forEach(rn => {
         const uw = rn._uw, uh = rn._uh;
         const cx = rn.x + uw / 2, cy = rn.y + uh / 2;
         rn.rotation = (rn.rotation || 0) === 0 ? 90 : 0;
         if (rn.rotation === 90) {
-          rn.x = Math.max(0, Math.round((cx - uh / 2) / GRID) * GRID);
-          rn.y = Math.max(0, Math.round((cy - uw / 2) / GRID) * GRID);
+          rn.x = snap(cx - uh / 2);
+          rn.y = snap(cy - uw / 2);
         } else {
-          rn.x = Math.max(0, Math.round((cx - uw / 2) / GRID) * GRID);
-          rn.y = Math.max(0, Math.round((cy - uh / 2) / GRID) * GRID);
+          rn.x = snap(cx - uw / 2);
+          rn.y = snap(cy - uh / 2);
         }
       });
 
-      // 7. Reposition cards along the dominant axis to restore original gaps
-      // Anchor = first card in sort order (stays in place)
-      for (let i = 0; i < sorted.length - 1; i++) {
+      // 5. Resolve overlaps along the dominant axis.
+      //    Sweep from first to last in sort order: if a card overlaps the
+      //    previous one, push it forward by multiples of GRID until clear.
+      for (let i = 1; i < sorted.length; i++) {
+        const prev = sorted[i - 1];
         const cur  = sorted[i];
-        const next = sorted[i + 1];
-        const curAABB  = getNodeAABB(cur);
-        const nextAABB = getNodeAABB(next);
-        const snap = v => Math.max(0, Math.round(v / GRID) * GRID);
-        if (horizontal) {
-          // Place next card so its left edge = cur right edge + original gap
-          const targetLeft = curAABB.r + gaps[i];
-          const dx = targetLeft - nextAABB.x;
-          next.x = snap(next.x + dx);
-        } else {
-          // Place next card so its top edge = cur bottom edge + original gap
-          const targetTop = curAABB.b + gaps[i];
-          const dy = targetTop - nextAABB.y;
-          next.y = snap(next.y + dy);
+        let iterations = 0;
+        while (iterations++ < 400) {
+          const pa = getNodeAABB(prev);
+          const ca = getNodeAABB(cur);
+          // Check overlap (strict — touching edges are fine)
+          const overlapX = pa.r > ca.x && ca.r > pa.x;
+          const overlapY = pa.b > ca.y && ca.b > pa.y;
+          if (!overlapX || !overlapY) break; // no overlap — done
+          // Push cur forward by 1 GRID along the dominant axis
+          if (horizontal) cur.x = snap(cur.x + GRID);
+          else            cur.y = snap(cur.y + GRID);
         }
       }
     }
@@ -2903,6 +3203,20 @@ function makeCard(n) {
     S.drag   = n;
     S.dragOX = mouseCanvasX - n.x;
     S.dragOY = mouseCanvasY - n.y;
+    // Track last collision-free position for hard-stop collision
+    S.dragLastValidX = n.x;
+    S.dragLastValidY = n.y;
+
+    // Cache real dimensions for ALL nodes before drag starts so resolveOverlap uses correct sizes
+    S.nodes.forEach(node => {
+      if (!node._uw || !node._uh) {
+        const el2 = document.querySelector(`[data-id="${node.id}"]`);
+        if (el2 && el2.offsetWidth > 0) {
+          node._uw = el2.offsetWidth;
+          node._uh = el2.offsetHeight;
+        }
+      }
+    });
 
     if (S.multiSel.has(n.id)) {
       S.dragOffsets = [];
@@ -2910,8 +3224,11 @@ function makeCard(n) {
         const other = S.nodes.find(x => x.id === id);
         if (other) S.dragOffsets.push({ node: other, dx: other.x - n.x, dy: other.y - n.y });
       });
+      // Record all dragged node IDs for post-drag membership update
+      S._draggedNodeIds = [n.id, ...S.multiSel].filter((v,i,a)=>a.indexOf(v)===i);
     } else {
       S.dragOffsets = [];
+      S._draggedNodeIds = [n.id];
     }
   });
 
@@ -2925,11 +3242,9 @@ function makeCard(n) {
  */
 function getCardAABB(n, overrideX, overrideY) {
   const el = document.querySelector(`[data-id="${n.id}"]`);
-  // Use stored unrotated dimensions when available (set on first rotation).
-  // CSS transform never changes offsetWidth/offsetHeight, but after multiple
-  // rotations n._uw/_uh are always the true unrotated size.
-  const uw = n._uw || (el ? el.offsetWidth  : 224);
-  const uh = n._uh || (el ? el.offsetHeight : 120);
+  // Prefer cached unrotated dims; fall back to live DOM; last resort: conservative estimate
+  const uw = n._uw || (el && el.offsetWidth  > 0 ? el.offsetWidth  : 224);
+  const uh = n._uh || (el && el.offsetHeight > 0 ? el.offsetHeight : 320); // tall fallback
   const px = (overrideX !== undefined) ? overrideX : n.x;
   const py = (overrideY !== undefined) ? overrideY : n.y;
   const rot = ((n.rotation || 0) * Math.PI) / 180;
@@ -2955,32 +3270,96 @@ function rectsOverlap(a, b) {
          a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-function resolveOverlap(dragNode, nx, ny) {
-  const others = S.nodes.filter(n => n.id !== dragNode.id);
-  // AABB of the dragged card at the candidate position
-  let dr = getCardAABB(dragNode, nx, ny);
+function resolveOverlap(dragNode, nx, ny, excludeIds) {
+  // excludeIds: other nodes being dragged simultaneously (skip them as obstacles)
+  const excluded = new Set(excludeIds || [dragNode.id]);
+  const others = S.nodes.filter(n => !excluded.has(n.id));
 
-  for (const o of others) {
-    const or = getCardAABB(o);
-    if (!or) continue;
-    if (rectsOverlap(dr, or)) {
-      // Push away along the axis of least penetration
-      const pushRight = or.x + or.w - dr.x;
-      const pushLeft  = dr.x + dr.w - or.x;
-      const pushDown  = or.y + or.h - dr.y;
-      const pushUp    = dr.y + dr.h - or.y;
-      const minH = Math.min(pushRight, pushLeft);
-      const minV = Math.min(pushDown, pushUp);
-      if (minH <= minV) {
-        nx += (pushRight < pushLeft) ? pushRight : -pushLeft;
-      } else {
-        ny += (pushDown < pushUp)    ? pushDown  : -pushUp;
+  // Iterative: keep pushing until no overlaps remain (max 20 passes)
+  for (let pass = 0; pass < 20; pass++) {
+    let moved = false;
+    let dr = getCardAABB(dragNode, nx, ny);
+    for (const o of others) {
+      const or = getCardAABB(o);
+      if (!or) continue;
+      if (rectsOverlap(dr, or)) {
+        const pushRight = or.x + or.w - dr.x;
+        const pushLeft  = dr.x + dr.w - or.x;
+        const pushDown  = or.y + or.h - dr.y;
+        const pushUp    = dr.y + dr.h - or.y;
+        const minH = Math.min(pushRight, pushLeft);
+        const minV = Math.min(pushDown, pushUp);
+        if (minH <= minV) {
+          nx += (pushRight < pushLeft) ? pushRight : -pushLeft;
+        } else {
+          ny += (pushDown < pushUp) ? pushDown : -pushUp;
+        }
+        nx = Math.max(0, nx); ny = Math.max(0, ny);
+        dr = getCardAABB(dragNode, nx, ny);
+        moved = true;
       }
-      nx = Math.max(0, nx); ny = Math.max(0, ny);
-      dr = getCardAABB(dragNode, nx, ny);
     }
+    if (!moved) break;
   }
   return { x: Math.max(0, nx), y: Math.max(0, ny) };
+}
+
+// ── Block membership: called after a drag ends ──
+// For each moved node, check if its centre is inside a block's content area.
+// A block's "content area" is the rect of its currently-still-member nodes (before updating).
+// Rule: a node belongs to a block if its AABB centre falls inside the block's padded bounding rect.
+function updateBlockMembership(movedIds) {
+  if (!S.blocks.length || !movedIds.length) return;
+
+  const PAD = GRID;
+
+  // Compute the bounding rect of a block using only nodes NOT in movedIds
+  // (i.e. the "frozen" rect — other members that didn't move define the box)
+  function frozenRect(blk) {
+    const staticIds = blk.nodeIds.filter(id => !movedIds.includes(id));
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    staticIds.forEach(id => {
+      const n = S.nodes.find(x => x.id === id);
+      if (!n) return;
+      const bb = getNodeAABB(n);
+      if (bb.x < minX) minX = bb.x; if (bb.y < minY) minY = bb.y;
+      if (bb.r > maxX) maxX = bb.r; if (bb.b > maxY) maxY = bb.b;
+    });
+    if (!isFinite(minX)) return null;
+    return { x: minX - PAD, y: minY - PAD, r: maxX + PAD, b: maxY + PAD };
+  }
+
+  movedIds.forEach(nodeId => {
+    const n = S.nodes.find(x => x.id === nodeId);
+    if (!n) return;
+    const bb = getNodeAABB(n);
+    const cx = (bb.x + bb.r) / 2;
+    const cy = (bb.y + bb.b) / 2;
+
+    S.blocks.forEach(blk => {
+      const wasInside = blk.nodeIds.includes(nodeId);
+      const fr = frozenRect(blk);
+
+      if (fr) {
+        // Node is "inside" if its centre is within the frozen rect
+        const isInside = cx >= fr.x && cx <= fr.r && cy >= fr.y && cy <= fr.b;
+
+        if (wasInside && !isInside) {
+          // ── Exiting: remove from block ──
+          blk.nodeIds = blk.nodeIds.filter(id => id !== nodeId);
+        } else if (!wasInside && isInside) {
+          // ── Entering: add to block ──
+          blk.nodeIds = [...blk.nodeIds, nodeId];
+        }
+      } else if (wasInside) {
+        // Frozen rect is empty (all members moved) — keep current membership unchanged
+        // (the block just follows all its members)
+      }
+    });
+  });
+
+  // Clean up: remove blocks with fewer than 1 remaining node
+  S.blocks = S.blocks.filter(blk => blk.nodeIds.filter(id => S.nodes.find(n => n.id === id)).length > 0);
 }
 
 document.addEventListener('mousemove', e => {
@@ -3000,16 +3379,60 @@ document.addEventListener('mousemove', e => {
     nx = snapVal(nx); ny = snapVal(ny);
 
     if (S.dragOffsets.length > 0) {
-      S.drag.x = Math.max(0, nx);
-      S.drag.y = Math.max(0, ny);
-      S.dragOffsets.forEach(({ node, dx, dy }) => {
-        node.x = Math.max(0, nx + dx);
-        node.y = Math.max(0, ny + dy);
-      });
+      // ── Multi-drag: rigid group, last-valid-position approach ──
+      const draggedIds = new Set([S.drag.id, ...S.dragOffsets.map(o => o.node.id)]);
+      const statics = S.nodes.filter(n => !draggedIds.has(n.id));
+
+      // Build candidate positions for the whole group
+      const group = [
+        { node: S.drag, cx: nx, cy: ny },
+        ...S.dragOffsets.map(({ node, dx, dy }) => ({
+          node,
+          cx: snapVal(Math.max(0, nx + dx)),
+          cy: snapVal(Math.max(0, ny + dy))
+        }))
+      ];
+
+      // Check if ANY node in the group overlaps ANY static node at proposed positions
+      let hasOverlap = false;
+      outer: for (const { node, cx, cy } of group) {
+        const dr = getCardAABB(node, cx, cy);
+        for (const o of statics) {
+          const or = getCardAABB(o);
+          if (or && rectsOverlap(dr, or)) { hasOverlap = true; break outer; }
+        }
+      }
+
+      if (!hasOverlap) {
+        // No collision — accept new position and update last-valid
+        S.drag.x = Math.max(0, nx);
+        S.drag.y = Math.max(0, ny);
+        S.dragOffsets.forEach(({ node, dx, dy }) => {
+          node.x = Math.max(0, snapVal(nx + dx));
+          node.y = Math.max(0, snapVal(ny + dy));
+        });
+        S.dragLastValidX = nx;
+        S.dragLastValidY = ny;
+      }
+      // else: keep everyone at last-valid position (no move)
+
     } else {
-      const resolved = resolveOverlap(S.drag, nx, ny);
-      S.drag.x = resolved.x;
-      S.drag.y = resolved.y;
+      // ── Single drag: last-valid-position ──
+      const excluded = new Set([S.drag.id]);
+      const statics = S.nodes.filter(n => !excluded.has(n.id));
+      const dr = getCardAABB(S.drag, nx, ny);
+      const hasOverlap = statics.some(o => {
+        const or = getCardAABB(o);
+        return or && rectsOverlap(dr, or);
+      });
+
+      if (!hasOverlap) {
+        S.drag.x = nx;
+        S.drag.y = ny;
+        S.dragLastValidX = nx;
+        S.dragLastValidY = ny;
+      }
+      // else: stay at last-valid (card doesn't move)
     }
     expandCanvasIfNeeded();
     renderCanvas();
@@ -3036,6 +3459,19 @@ document.addEventListener('mousemove', e => {
       if (!bb) return;
       if (bb.x < rx+rw && bb.x+bb.w > rx && bb.y < ry+rh && bb.y+bb.h > ry) S.multiSel.add(n.id);
     });
+    // Also: if rubber-band intersects a block's bounding box, select ALL its nodes
+    S.blocks.forEach(blk => {
+      const blockNodes = blk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
+      if (blockNodes.length === 0) return;
+      let bMinX = Infinity, bMinY = Infinity, bMaxX = -Infinity, bMaxY = -Infinity;
+      blockNodes.forEach(n => {
+        const bb = getNodeAABB(n);
+        if (bb.x < bMinX) bMinX = bb.x; if (bb.y < bMinY) bMinY = bb.y;
+        if (bb.r > bMaxX) bMaxX = bb.r; if (bb.b > bMaxY) bMaxY = bb.b;
+      });
+      const hit = bMinX < rx+rw && bMaxX > rx && bMinY < ry+rh && bMaxY > ry;
+      if (hit) blk.nodeIds.forEach(id => S.multiSel.add(id));
+    });
     S.selected = null;
     renderCanvas();
   }
@@ -3054,6 +3490,14 @@ document.addEventListener('mouseup', e => {
   S.drag = null; S.dragOffsets = [];
   sc.classList.remove('rubber-sel');
   expandCanvasIfNeeded();
+
+  // ── After drag: update block membership for moved cards ──
+  if (S._draggedNodeIds && S._draggedNodeIds.length > 0) {
+    updateBlockMembership(S._draggedNodeIds);
+    S._draggedNodeIds = null;
+    renderTree();
+  }
+  S._draggedNodeIds = null;
   if (S.rubber) {
     S.rubber = null;
     document.getElementById('rubber-band').style.display = 'none';
@@ -3065,10 +3509,10 @@ document.addEventListener('mouseup', e => {
     renderTree(); renderCanvas(); renderProps();
     return;
   }
-  // Click on empty canvas (not on a card) = deselect all
-  if (e.button === 0 && !e.target.closest('.ub-card') && e.target.closest('#cscroll')) {
-    if (S.selected !== null || S.multiSel.size > 0) {
-      S.selected = null; S.multiSel.clear();
+  // Click on empty canvas (not on a card or block) = deselect all
+  if (e.button === 0 && !e.target.closest('.ub-card') && !e.target.closest('.canvas-block') && e.target.closest('#cscroll')) {
+    if (S.selected !== null || S.multiSel.size > 0 || S.selectedBlock !== null) {
+      S.selected = null; S.multiSel.clear(); S.selectedBlock = null;
       document.activeElement?.blur();
       renderTree(); renderCanvas(); renderProps();
     }
@@ -3135,6 +3579,7 @@ function confirmDeleteOk() {
 
 
 function select(id, addToMulti) {
+  S.selectedBlock = null;
   if (addToMulti) {
     if (S.multiSel.has(id)) { S.multiSel.delete(id); }
     else { S.multiSel.add(id); }
@@ -3695,7 +4140,7 @@ function newProject() {
 }
 
 function _doNewProject() {
-  Object.assign(S, {nodes:[], selected:null, multiSel:new Set(), project:'untitled', nextId:1});
+  Object.assign(S, {nodes:[], blocks:[], selected:null, selectedBlock:null, multiSel:new Set(), project:'untitled', nextId:1, nextBlockId:1});
   renderTree(); renderCanvas(); renderProps(); updateStats();
   status('New project created');
 }
@@ -3715,7 +4160,7 @@ function doSaveProject() {
   const projName = filename.replace(/\.(ubp|json)$/i, '');
   S.project = projName;
   updateStats();
-  download(filename, JSON.stringify({name: projName, nodes:S.nodes, nextId:S.nextId}, null, 2));
+  download(filename, JSON.stringify({name: projName, nodes:S.nodes, blocks:S.blocks, nextId:S.nextId, nextBlockId:S.nextBlockId}, null, 2));
   closeModal('modal-save');
   status(`Project "${filename}" saved`);
 }
@@ -3732,7 +4177,7 @@ function loadProject() {
       // Use filename (without extension) as project name if file has no embedded name
       const fileBase = filename ? filename.replace(/\.(ubp|json)$/i,'') : null;
       const projName = d.name || fileBase || 'untitled';
-      Object.assign(S,{nodes,project:projName,nextId:d.nextId||1,selected:null});
+      Object.assign(S,{nodes,blocks:d.blocks||[],project:projName,nextId:d.nextId||1,nextBlockId:d.nextBlockId||1,selected:null,selectedBlock:null});
       renderTree(); renderCanvas(); renderProps(); updateStats();
       expandCanvasIfNeeded();
       status(`Project "${filename || projName}" loaded`);
@@ -4353,7 +4798,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-['modal-mal','modal-ral','modal-export','modal-edit-mal','modal-edit-ral','modal-confirm','modal-save','modal-bf-editor','modal-find'].forEach(id => {
+['modal-mal','modal-ral','modal-export','modal-edit-mal','modal-edit-ral','modal-confirm','modal-save','modal-bf-editor','modal-find','modal-put-block'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('click', e => { if(e.target===e.currentTarget) closeModal(id); });
   });
@@ -4475,6 +4920,35 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
       <div id="find-results" style="display:flex;flex-direction:column;gap:3px;max-height:340px;overflow-y:auto"></div>
       <div id="find-status" style="font-size:11px;color:var(--text3);margin-top:8px;min-height:16px"></div>
+    </div>
+  </div>
+</div>
+<!-- MODAL: Put in Block -->
+<div class="overlay" id="modal-put-block">
+  <div class="modal" style="min-width:360px;max-width:440px">
+    <div class="mhdr" style="color:#e07020">
+      <span>⬡ Group</span>
+      <button class="mx" onclick="closeModal('modal-put-block')">×</button>
+    </div>
+    <div class="mbody">
+      <div class="prop-grp">
+        <label class="prop-lbl">Block Name <span style="color:var(--red)">*</span></label>
+        <input class="prop-in" id="block-name-input"
+          placeholder="e.g. PERIPHERAL_GROUP"
+          oninput="let v=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');if(v.length>0&&/^[0-9]/.test(v))v=v.slice(1);this.value=v;document.getElementById('block-name-err').textContent=''"
+          onkeydown="if(event.key==='Enter')confirmPutInBlock();if(event.key==='Escape')closeModal('modal-put-block')" />
+        <span class="field-err" id="block-name-err"></span>
+        <span style="font-size:10px;color:var(--text3);margin-top:4px;display:block">
+          A container block will wrap the <span id="block-sel-count">0</span> selected cards on the canvas
+        </span>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn btn-ghost" onclick="closeModal('modal-put-block')">Cancel</button>
+      <button class="btn" onclick="confirmPutInBlock()"
+        style="background:#c05000;color:#fff;border:none;padding:5px 18px;border-radius:var(--radius);cursor:pointer;font-size:12px;font-weight:600">
+        ⬡ Group
+      </button>
     </div>
   </div>
 </div>

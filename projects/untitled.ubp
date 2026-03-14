@@ -14,7 +14,6 @@
       "accessWidths": [
         8
       ],
-      "internalAccess": null,
       "resetVal": "0x00000000",
       "defaultBfAccess": "RW",
       "defaultBfReservedVal": null,
@@ -90,7 +89,65 @@
       "y": 416,
       "_uw": 224,
       "_uh": 227,
-      "rotation": 0
+      "rotation": 90
+    },
+    {
+      "id": 4,
+      "layer": "mal",
+      "name": "BOOTA",
+      "type": "segment",
+      "memType": "FLASH",
+      "segAddr": "0x100000",
+      "segSize": 65536,
+      "segDefault": "0x00",
+      "desc": "",
+      "x": 736,
+      "y": 416
+    },
+    {
+      "id": 6,
+      "layer": "mal",
+      "name": "BOOTB",
+      "type": "segment",
+      "memType": "ROM",
+      "segAddr": "0x200000",
+      "segSize": 65536,
+      "segDefault": "0x00",
+      "desc": "",
+      "x": 992,
+      "y": 416
+    },
+    {
+      "id": 3,
+      "layer": "mal",
+      "name": "GM_RAM_1",
+      "type": "segment",
+      "memType": "RAM",
+      "segAddr": "0xFE400010",
+      "segSize": 65536,
+      "segDefault": "0x00",
+      "desc": "",
+      "x": 1248,
+      "y": 416,
+      "_uw": 224,
+      "_uh": 154,
+      "rotation": 90
+    },
+    {
+      "id": 5,
+      "layer": "mal",
+      "name": "GTM",
+      "type": "segment",
+      "memType": "MMIO",
+      "segAddr": "0xFEF00010",
+      "segSize": 4096,
+      "segDefault": "0x00",
+      "desc": "",
+      "x": 1504,
+      "y": 416,
+      "_uw": 224,
+      "_uh": 154,
+      "rotation": 90
     },
     {
       "id": 2,
@@ -106,7 +163,6 @@
         8,
         32
       ],
-      "internalAccess": null,
       "resetVal": "0x00000000",
       "defaultBfAccess": "RW",
       "defaultBfReservedVal": null,
@@ -154,12 +210,104 @@
         }
       ],
       "_nextBfId": 6,
-      "x": 736,
+      "x": 1568,
       "y": 416,
       "_uw": 608,
       "_uh": 227,
-      "rotation": 0
+      "rotation": 90
+    },
+    {
+      "id": 7,
+      "layer": "ral",
+      "name": "LONG",
+      "baseName": "LONG",
+      "type": "register",
+      "regType": "MMIO",
+      "regSize": 32,
+      "coreVal": null,
+      "regAddr": "0xFFFF0000",
+      "accessWidths": [
+        8,
+        16,
+        32
+      ],
+      "resetVal": "0x00000000",
+      "defaultBfAccess": "RW",
+      "defaultBfReservedVal": null,
+      "desc": "",
+      "bitfields": [
+        {
+          "_id": 1,
+          "name": "RES",
+          "bitStart": 25,
+          "bitEnd": 31,
+          "access": "RESERVED",
+          "isDefault": false
+        },
+        {
+          "_id": 2,
+          "name": "DATA",
+          "bitStart": 15,
+          "bitEnd": 24,
+          "access": "RO",
+          "isDefault": false
+        },
+        {
+          "_id": 3,
+          "name": "SENT",
+          "bitStart": 5,
+          "bitEnd": 14,
+          "access": "RESERVED",
+          "isDefault": false
+        },
+        {
+          "_id": 4,
+          "name": "L",
+          "bitStart": 4,
+          "bitEnd": 4,
+          "access": "RW",
+          "isDefault": false
+        },
+        {
+          "_id": 5,
+          "name": "P",
+          "bitStart": 3,
+          "bitEnd": 3,
+          "access": "RW",
+          "isDefault": false
+        },
+        {
+          "_id": 6,
+          "name": "O",
+          "bitStart": 2,
+          "bitEnd": 2,
+          "access": "RW",
+          "isDefault": false
+        },
+        {
+          "_id": 7,
+          "name": "J",
+          "bitStart": 1,
+          "bitEnd": 1,
+          "access": "RW",
+          "isDefault": false
+        },
+        {
+          "_id": 8,
+          "name": "G",
+          "bitStart": 0,
+          "bitEnd": 0,
+          "access": "RW",
+          "isDefault": false
+        }
+      ],
+      "_nextBfId": 9,
+      "x": 1824,
+      "y": 416,
+      "_uw": 611,
+      "_uh": 227,
+      "rotation": 90
     }
   ],
-  "nextId": 3
+  "nextId": 8
 }
