@@ -418,28 +418,39 @@ body {
 /* Canvas container blocks */
 .canvas-block {
   position: absolute;
-  background: #1a1c2a;
-  border: 3px solid #6b8aff;
+  background: rgba(20, 12, 4, 0.6);
+  border: 3px solid #7a4010;
   border-radius: 8px;
   pointer-events: auto;
   z-index: 0;
   box-sizing: border-box;
   cursor: default;
+  display: flex;
+  flex-direction: column;
 }
-.canvas-block-label {
-  position: absolute;
+.canvas-block-header {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-bottom: 2px solid #7a4010;
+  border-radius: 5px 5px 0 0;
+  background: rgba(90, 40, 8, 0.55);
   font-family: var(--font-code);
   font-size: 11px;
-  font-weight: 600;
-  color: #6b8aff;
-  background: #1a1c2a;
-  padding: 2px 8px;
-  border-radius: 4px 4px 0 0;
-  border: 3px solid #6b8aff;
-  border-bottom: none;
+  font-weight: 700;
+  color: #e8a060;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   pointer-events: none;
-  z-index: 0;
+  user-select: none;
+  flex-shrink: 0;
+}
+.canvas-block-label {
+  display: none; /* replaced by header inside rect */
 }
 
 /* Group / Ungroup tree buttons — same layout as .tree-add */
@@ -974,7 +985,7 @@ body {
 
 <script>
 const GRID = 32;
-const S = { project:'untitled', nodes:[], blocks:[], selected:null, selectedBlock:null, multiSel:new Set(), nextId:1, nextBlockId:1, adding:null, editing:null, drag:null, dragOX:0, dragOY:0, dragOffsets:[], snapEnabled:true, view:'design', rubber:null, zoom:1, pan:null, ctrlDown:false };
+const S = { project:'untitled', nodes:[], blocks:[], selected:null, selectedBlock:null, multiSel:new Set(), nextId:1, nextBlockId:1, adding:null, editing:null, drag:null, dragOX:0, dragOY:0, dragOffsets:[], snapEnabled:true, view:'design', rubber:null, zoom:1, pan:null, ctrlDown:false, _dragMoved:false };
 const RAL_TYPES = ['register','bitfield','register_group','peripheral_block'];
 
 /* ── Find a free position at the centre of the visible canvas, avoiding collisions ── */
@@ -1475,11 +1486,11 @@ function confirmPutInBlock() {
 function renderBlocks() {
   const inner = document.getElementById('cinner');
   const PAD   = GRID;
-  const LBL_H = 22;
+  const HDR_H = 28; // header height inside the block rect
 
   inner.querySelectorAll('.canvas-block,.canvas-block-label').forEach(el => el.remove());
 
-  // Physical rect of a block: accounts for own PAD and child blocks' physical rects
+  // Physical rect of a block: the full rect INCLUDING the header bar
   function blockRect(blk) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     blk.nodeIds.forEach(id => {
@@ -1495,14 +1506,14 @@ function renderBlocks() {
       const cr = blockRect(cb);
       if (!cr) return;
       if (cr.x         < minX) minX = cr.x;
-      if (cr.y - LBL_H < minY) minY = cr.y - LBL_H;
+      if (cr.y         < minY) minY = cr.y;
       if (cr.x + cr.w  > maxX) maxX = cr.x + cr.w;
       if (cr.y + cr.h  > maxY) maxY = cr.y + cr.h;
     });
     if (!isFinite(minX)) return null;
-    // Snap outer edges to GRID boundaries (floor left/top, ceil right/bottom)
+    // Snap outer edges to GRID boundaries; reserve PAD + HDR_H on top for header
     const rx  = Math.floor((minX - PAD) / GRID) * GRID;
-    const ry  = Math.floor((minY - PAD) / GRID) * GRID;
+    const ry  = Math.floor((minY - PAD - HDR_H) / GRID) * GRID;
     const rx2 = Math.ceil( (maxX + PAD) / GRID) * GRID;
     const ry2 = Math.ceil( (maxY + PAD) / GRID) * GRID;
     return { x: rx, y: ry, w: rx2 - rx, h: ry2 - ry };
@@ -1523,35 +1534,43 @@ function renderBlocks() {
   const maxDepth = S.blocks.reduce((m, b) => Math.max(m, blockDepth(b)), 0);
 
   function depthStyle(depth) {
-    // Deeper nesting = more saturated border, but background always semi-transparent
-    const borders = ['#6b8aff','#4a6adf','#2a50bf','#1a409f'];
-    const bgs     = ['rgba(26,28,42,0.55)','rgba(22,24,40,0.55)','rgba(18,21,38,0.55)','rgba(14,18,36,0.55)'];
+    // Brown palette, darker for deeper nesting
+    const borders = ['#7a4010','#5a3008','#3a2004','#2a1800'];
+    const bgs     = ['rgba(20,10,4,0.60)','rgba(16,8,2,0.65)','rgba(12,6,2,0.70)','rgba(8,4,1,0.75)'];
+    const hdrs    = ['rgba(90,40,8,0.55)','rgba(70,30,5,0.60)','rgba(50,20,4,0.65)','rgba(35,14,2,0.70)'];
+    const texts   = ['#e8a060','#d08040','#b86828','#a05820'];
     const d = Math.min(depth, borders.length - 1);
-    return { border: borders[d], bg: bgs[d] };
+    return { border: borders[d], bg: bgs[d], hdr: hdrs[d], txt: texts[d] };
   }
 
   sorted.forEach(blk => {
     const rect = blockRect(blk);
     if (!rect) return;
     const depth = blockDepth(blk);
-    const { border: borderColor, bg: bgColor } = depthStyle(depth);
-    // Invert: leaf blocks (depth=0) get highest z-index among blocks,
-    // parent blocks get lower z-index so children are always visible above them.
-    // Cards (.ub-card) get z-index 500 (set in renderCanvas) to always stay on top of all blocks.
-    const zIdx = (maxDepth - depth) + 1;  // leaf=maxDepth+1-0=highest, root=1
+    const { border: borderColor, bg: bgColor, hdr: hdrColor, txt: txtColor } = depthStyle(depth);
+    const zIdx = (maxDepth - depth) + 1;
+    const isSelected = S.selectedBlock === blk.id;
 
     const div = document.createElement('div');
     div.className = 'canvas-block';
     div.dataset.blockId = blk.id;
     div.style.left        = rect.x + 'px';
-    div.style.top         = (rect.y + LBL_H) + 'px';
+    div.style.top         = rect.y + 'px';
     div.style.width       = rect.w + 'px';
-    div.style.height      = Math.max(0, rect.h - LBL_H) + 'px';
-    const isSelected = S.selectedBlock === blk.id;
+    div.style.height      = rect.h + 'px';
     div.style.borderColor = isSelected ? '#ffffff' : borderColor;
     div.style.background  = bgColor;
     div.style.zIndex      = zIdx;
     if (isSelected) div.style.boxShadow = '0 0 0 3px #ffffff40';
+
+    // ── Header inside the rect ──
+    const hdr = document.createElement('div');
+    hdr.className = 'canvas-block-header';
+    hdr.style.borderBottomColor = isSelected ? '#ffffff' : borderColor;
+    hdr.style.background = hdrColor;
+    hdr.style.color = isSelected ? '#ffffff' : txtColor;
+    hdr.textContent = blk.name;
+    div.appendChild(hdr);
 
     div.addEventListener('click', e => {
       if (e.target !== div) return;
@@ -1585,26 +1604,19 @@ function renderBlocks() {
       S.dragLastValidY = anchor.y;
       S._dragSource = 'block';
       S._dragBlockId = blk.id;
-      // Cache dims
+      S._dragMoved  = false;
+      // Cache dims for ALL nodes before drag starts
       S.nodes.forEach(node => {
-        if (!node._uw || !node._uh) {
-          const el2 = document.querySelector(`[data-id="${node.id}"]`);
-          if (el2 && el2.offsetWidth > 0) { node._uw = el2.offsetWidth; node._uh = el2.offsetHeight; }
+        const el2 = document.querySelector(`[data-id="${node.id}"]`);
+        if (el2 && el2.offsetWidth > 0) {
+          node._uw = Math.ceil(el2.offsetWidth  / GRID) * GRID;
+          node._uh = Math.ceil(el2.offsetHeight / GRID) * GRID;
         }
       });
       document.getElementById('cscroll').classList.add('dragging');
     });
 
     inner.insertBefore(div, inner.firstChild);
-
-    const lbl = document.createElement('div');
-    lbl.className = 'canvas-block-label';
-    lbl.style.left = (rect.x + 10) + 'px';
-    lbl.style.top  = rect.y + 'px';
-    lbl.style.color = borderColor; lbl.style.borderColor = borderColor; lbl.style.background = bgColor;
-    lbl.style.zIndex = zIdx;
-    lbl.textContent = blk.name;
-    inner.insertBefore(lbl, div.nextSibling);
   });
 }
 
@@ -3409,6 +3421,7 @@ function makeCard(n) {
     S.dragLastValidX = n.x;
     S.dragLastValidY = n.y;
     S._dragSource = 'card';
+    S._dragMoved  = false;
 
     // Cache real dimensions for ALL nodes before drag starts so resolveOverlap uses correct sizes
     S.nodes.forEach(node => {
@@ -3445,9 +3458,15 @@ function makeCard(n) {
  */
 function getCardAABB(n, overrideX, overrideY) {
   const el = document.querySelector(`[data-id="${n.id}"]`);
-  // Prefer cached unrotated dims; fall back to live DOM; last resort: conservative estimate
-  const uw = n._uw || (el && el.offsetWidth  > 0 ? el.offsetWidth  : 224);
-  const uh = n._uh || (el && el.offsetHeight > 0 ? el.offsetHeight : 320); // tall fallback
+  // Always use live DOM dims if available (snapped to GRID), else cached, else conservative fallback
+  let uw, uh;
+  if (el && el.offsetWidth > 0) {
+    uw = Math.ceil(el.offsetWidth  / GRID) * GRID;
+    uh = Math.ceil(el.offsetHeight / GRID) * GRID;
+  } else {
+    uw = n._uw || 224;
+    uh = n._uh || 320;
+  }
   const px = (overrideX !== undefined) ? overrideX : n.x;
   const py = (overrideY !== undefined) ? overrideY : n.y;
   const rot = ((n.rotation || 0) * Math.PI) / 180;
@@ -3598,32 +3617,124 @@ document.addEventListener('mousemove', e => {
       }))
     ];
 
-    // ── Build obstacle set ──
-    // BLOCK drag: obstacles = all nodes NOT in this block (and not in child blocks).
-    //             Other blocks' nodes ARE obstacles. Cards outside are obstacles.
-    // CARD drag:  obstacles = all nodes NOT in the same block as this card.
-    //             Co-members of the card's current block are NOT obstacles (free movement inside).
-    let obstacleIds;
-    if (isBlockDrag) {
-      // All nodes not being dragged are obstacles
-      obstacleIds = new Set(S.nodes.filter(n => !draggedIds.has(n.id)).map(n => n.id));
-    } else {
-      // Card drag: co-members of home block are not obstacles
-      const homeIds = new Set();
-      S.blocks.forEach(blk => {
-        if (blk.nodeIds.includes(S.drag.id)) blk.nodeIds.forEach(id => homeIds.add(id));
-      });
-      obstacleIds = new Set(S.nodes.filter(n => !draggedIds.has(n.id) && !homeIds.has(n.id)).map(n => n.id));
-    }
-    const obstacles = S.nodes.filter(n => obstacleIds.has(n.id));
-
     // ── Collision check ──
     let hasOverlap = false;
-    outer: for (const { node, cx, cy } of candidates) {
-      const dr = getCardAABB(node, cx, cy);
-      for (const o of obstacles) {
-        const or = getCardAABB(o);
-        if (or && rectsOverlap(dr, or)) { hasOverlap = true; break outer; }
+
+    if (isBlockDrag) {
+      // ── BLOCK DRAG: use the block's full visual rect as the collision unit ──
+      // Compute dragged block AABB at candidate positions (cards + PAD on all sides + header)
+      const HDR_H = 28;
+      let dbMinX = Infinity, dbMinY = Infinity, dbMaxX = -Infinity, dbMaxY = -Infinity;
+      candidates.forEach(({ node, cx, cy }) => {
+        const bb = getCardAABB(node, cx, cy);
+        if (bb.x < dbMinX) dbMinX = bb.x; if (bb.y < dbMinY) dbMinY = bb.y;
+        if (bb.x + bb.w > dbMaxX) dbMaxX = bb.x + bb.w;
+        if (bb.y + bb.h > dbMaxY) dbMaxY = bb.y + bb.h;
+      });
+
+      if (isFinite(dbMinX)) {
+        // Full block rect including PAD and header
+        const dbRect = {
+          x: dbMinX - PAD,
+          y: dbMinY - PAD - HDR_H,
+          w: (dbMaxX - dbMinX) + PAD * 2,
+          h: (dbMaxY - dbMinY) + PAD * 2 + HDR_H
+        };
+
+        const dragBlockId = S._dragBlockId;
+
+        // Related blocks (self + descendants + parent) — these may overlap freely
+        const relatedIds = new Set([dragBlockId]);
+        function addDesc(blk) {
+          (blk.childBlockIds || []).forEach(cid => {
+            relatedIds.add(cid);
+            const cb = S.blocks.find(b => b.id === cid);
+            if (cb) addDesc(cb);
+          });
+        }
+        const dragBlk = S.blocks.find(b => b.id === dragBlockId);
+        if (dragBlk) addDesc(dragBlk);
+        S.blocks.forEach(b => {
+          if ((b.childBlockIds || []).includes(dragBlockId)) relatedIds.add(b.id);
+        });
+
+        // Nodes that are inside RELATED blocks — not obstacles
+        const relatedNodeIds = new Set(draggedIds);
+        S.blocks.forEach(b => {
+          if (relatedIds.has(b.id)) b.nodeIds.forEach(id => relatedNodeIds.add(id));
+        });
+        const externalNodes = S.nodes.filter(n => !relatedNodeIds.has(n.id));
+
+        // Check dragged block rect vs every external card
+        for (const o of externalNodes) {
+          const or = getCardAABB(o);
+          if (rectsOverlap(dbRect, or)) { hasOverlap = true; break; }
+        }
+
+        // Check dragged block rect vs every sibling block rect
+        if (!hasOverlap) {
+          for (const otherBlk of S.blocks) {
+            if (relatedIds.has(otherBlk.id)) continue;
+            const onodes = otherBlk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
+            if (!onodes.length) continue;
+            let ox1 = Infinity, oy1 = Infinity, ox2 = -Infinity, oy2 = -Infinity;
+            onodes.forEach(n => {
+              const bb = getCardAABB(n);
+              if (bb.x < ox1) ox1 = bb.x; if (bb.y < oy1) oy1 = bb.y;
+              if (bb.x + bb.w > ox2) ox2 = bb.x + bb.w; if (bb.y + bb.h > oy2) oy2 = bb.y + bb.h;
+            });
+            const oAABB = { x: ox1 - PAD, y: oy1 - PAD - HDR_H,
+                            w: (ox2 - ox1) + PAD * 2, h: (oy2 - oy1) + PAD * 2 + HDR_H };
+            if (rectsOverlap(dbRect, oAABB)) { hasOverlap = true; break; }
+          }
+        }
+      }
+
+    } else {
+      // ── CARD DRAG: check each dragged card vs all external cards AND block rects ──
+      const HDR_H = 28;
+
+      // Home block of the dragged card — can move freely inside it
+      const homeBlockIds = new Set();
+      const homeNodeIds  = new Set(draggedIds);
+      S.blocks.forEach(blk => {
+        if (blk.nodeIds.includes(S.drag.id)) {
+          homeBlockIds.add(blk.id);
+          blk.nodeIds.forEach(id => homeNodeIds.add(id));
+        }
+      });
+
+      const obstacles = S.nodes.filter(n => !homeNodeIds.has(n.id));
+
+      // Check dragged card vs external cards
+      outer: for (const { node, cx, cy } of candidates) {
+        const dr = getCardAABB(node, cx, cy);
+        for (const o of obstacles) {
+          const or = getCardAABB(o);
+          if (rectsOverlap(dr, or)) { hasOverlap = true; break outer; }
+        }
+      }
+
+      // Check dragged card vs block rects of blocks it doesn't belong to
+      if (!hasOverlap) {
+        for (const { node, cx, cy } of candidates) {
+          const dr = getCardAABB(node, cx, cy);
+          for (const blk of S.blocks) {
+            if (homeBlockIds.has(blk.id)) continue; // own block — free movement
+            const bnodes = blk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
+            if (!bnodes.length) continue;
+            let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity;
+            bnodes.forEach(n => {
+              const bb = getCardAABB(n);
+              if (bb.x < bx1) bx1 = bb.x; if (bb.y < by1) by1 = bb.y;
+              if (bb.x + bb.w > bx2) bx2 = bb.x + bb.w; if (bb.y + bb.h > by2) by2 = bb.y + bb.h;
+            });
+            const blkRect = { x: bx1 - PAD, y: by1 - PAD - HDR_H,
+                              w: (bx2 - bx1) + PAD * 2, h: (by2 - by1) + PAD * 2 + HDR_H };
+            if (rectsOverlap(dr, blkRect)) { hasOverlap = true; break; }
+          }
+          if (hasOverlap) break;
+        }
       }
     }
 
@@ -3637,6 +3748,7 @@ document.addEventListener('mousemove', e => {
       });
       S.dragLastValidX = nx;
       S.dragLastValidY = ny;
+      S._dragMoved = true;
 
       // ── Live membership: only for single card drag ──
       if (isCardDrag && !isGroupDrag) {
@@ -3718,13 +3830,13 @@ document.addEventListener('mouseup', e => {
   sc.classList.remove('rubber-sel');
   expandCanvasIfNeeded();
 
-  // ── After drag: update block membership for moved cards ──
-  if (S._draggedNodeIds && S._draggedNodeIds.length > 0) {
+  // ── After drag: update block membership only if cards actually moved ──
+  if (S._draggedNodeIds && S._draggedNodeIds.length > 0 && S._dragMoved) {
     updateBlockMembership(S._draggedNodeIds);
-    S._draggedNodeIds = null;
     renderTree();
   }
   S._draggedNodeIds = null;
+  S._dragMoved = false;
   if (S.rubber) {
     S.rubber = null;
     document.getElementById('rubber-band').style.display = 'none';
