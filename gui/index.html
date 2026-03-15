@@ -3528,45 +3528,105 @@ function getCardRect(n) {
   return { x: bb.x, y: bb.y, w: bb.w, h: bb.h };
 }
 
+
+const COLLISION_EPS = 0.1;
+const MAX_DRAG_STEP = 64;
+
 function rectsOverlap(a, b) {
-  // strict overlap only — touching edges are allowed
-  return a.x < b.x + b.w && a.x + a.w > b.x &&
-         a.y < b.y + b.h && a.y + a.h > b.y;
+  return !(
+    a.x + a.w <= b.x + COLLISION_EPS ||
+    a.x >= b.x + b.w - COLLISION_EPS ||
+    a.y + a.h <= b.y + COLLISION_EPS ||
+    a.y >= b.y + b.h - COLLISION_EPS
+  );
+}
+
+function separationVector(a, b) {
+  const dx1 = (b.x + b.w) - a.x;
+  const dx2 = (a.x + a.w) - b.x;
+  const dy1 = (b.y + b.h) - a.y;
+  const dy2 = (a.y + a.h) - b.y;
+
+  const minX = dx1 < dx2 ? dx1 : -dx2;
+  const minY = dy1 < dy2 ? dy1 : -dy2;
+
+  if (Math.abs(minX) < Math.abs(minY)) {
+    return {x:minX, y:0};
+  } else {
+    return {x:0, y:minY};
+  }
+}
+
+function sweepCollision(prev, next, node, others, getCardAABB) {
+  const steps = 6;
+  const dx = (next.x - prev.x) / steps;
+  const dy = (next.y - prev.y) / steps;
+
+  let test = {x: prev.x, y: prev.y};
+
+  for (let i=0;i<steps;i++){
+    test.x += dx;
+    test.y += dy;
+
+    const r = getCardAABB(node, test.x, test.y);
+
+    for(const o of others){
+      const or = getCardAABB(o);
+      if(or && rectsOverlap(r, or)){
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function resolveOverlap(dragNode, nx, ny, excludeIds) {
-  // excludeIds: other nodes being dragged simultaneously (skip them as obstacles)
+
   const excluded = new Set(excludeIds || [dragNode.id]);
   const others = S.nodes.filter(n => !excluded.has(n.id));
 
-  // Iterative: keep pushing until no overlaps remain (max 20 passes)
+  const prev = {x: dragNode.x, y: dragNode.y};
+
+  nx = Math.max(prev.x - MAX_DRAG_STEP, Math.min(nx, prev.x + MAX_DRAG_STEP));
+  ny = Math.max(prev.y - MAX_DRAG_STEP, Math.min(ny, prev.y + MAX_DRAG_STEP));
+
+  if(sweepCollision(prev,{x:nx,y:ny},dragNode,others,getCardAABB)){
+    nx = prev.x;
+    ny = prev.y;
+  }
+
   for (let pass = 0; pass < 20; pass++) {
+
     let moved = false;
     let dr = getCardAABB(dragNode, nx, ny);
+
     for (const o of others) {
+
       const or = getCardAABB(o);
       if (!or) continue;
+
       if (rectsOverlap(dr, or)) {
-        const pushRight = or.x + or.w - dr.x;
-        const pushLeft  = dr.x + dr.w - or.x;
-        const pushDown  = or.y + or.h - dr.y;
-        const pushUp    = dr.y + dr.h - or.y;
-        const minH = Math.min(pushRight, pushLeft);
-        const minV = Math.min(pushDown, pushUp);
-        if (minH <= minV) {
-          nx += (pushRight < pushLeft) ? pushRight : -pushLeft;
-        } else {
-          ny += (pushDown < pushUp) ? pushDown : -pushUp;
-        }
-        nx = Math.max(0, nx); ny = Math.max(0, ny);
+
+        const sep = separationVector(dr, or);
+
+        nx += sep.x;
+        ny += sep.y;
+
+        nx = Math.max(0, nx);
+        ny = Math.max(0, ny);
+
         dr = getCardAABB(dragNode, nx, ny);
+
         moved = true;
       }
     }
+
     if (!moved) break;
   }
-  return { x: Math.max(0, nx), y: Math.max(0, ny) };
+
+  return {x:nx, y:ny};
 }
+
 
 // ── Block membership: called after a drag ends ──
 // For each moved node, check if its centre is inside a block's content area.
@@ -5392,6 +5452,32 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
   </div>
 </div>
+
+
+<script>
+// ---- FIX: prevent group auto-resize when children move ----
+(function(){
+  function freezeGroupSizes(){
+    if(!window.S || !S.nodes) return;
+    for(const n of S.nodes){
+      if(n.type==="group" || n.kind==="group"){
+        if(n._fixedW===undefined){
+          n._fixedW = n.w;
+          n._fixedH = n.h;
+        }else{
+          n.w = n._fixedW;
+          n.h = n._fixedH;
+        }
+      }
+    }
+  }
+  function loop(){
+    try{ freezeGroupSizes(); }catch(e){}
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
 
 </body>
 </html>
