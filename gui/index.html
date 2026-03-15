@@ -985,7 +985,7 @@ body {
 
 <script>
 const GRID = 32;
-const S = { project:'untitled', nodes:[], blocks:[], selected:null, selectedBlock:null, multiSel:new Set(), nextId:1, nextBlockId:1, adding:null, editing:null, drag:null, dragOX:0, dragOY:0, dragOffsets:[], snapEnabled:true, view:'design', rubber:null, zoom:1, pan:null, ctrlDown:false, _dragMoved:false };
+const S = { project:'untitled', nodes:[], blocks:[], selected:null, selectedBlock:null, multiSel:new Set(), multiSelBlocks:new Set(), nextId:1, nextBlockId:1, adding:null, editing:null, drag:null, dragOX:0, dragOY:0, dragOffsets:[], snapEnabled:true, view:'design', rubber:null, zoom:1, pan:null, ctrlDown:false, _dragMoved:false };
 const RAL_TYPES = ['register','bitfield','register_group','peripheral_block'];
 
 /* ── Find a free position at the centre of the visible canvas, avoiding collisions ── */
@@ -1285,7 +1285,7 @@ function renderTree() {
 
   // ── Group / Ungroup buttons — always above MAL section ──
   bb.innerHTML = '';
-  if (S.multiSel.size > 1) {
+  if (S.multiSel.size + S.multiSelBlocks.size > 1) {
     const groupBtn = document.createElement('div');
     groupBtn.className = 'tree-block-btn';
     groupBtn.innerHTML = '⬡ Group...';
@@ -1371,12 +1371,17 @@ function renderTree() {
 
 // ── Block container functions ──
 
-function selectBlock(blockId) {
-  S.selectedBlock = (S.selectedBlock === blockId) ? null : blockId;
+function selectBlock(blockId, addToMulti) {
   S.selected = null;
-  S.multiSel.clear();
-  renderTree();
-  renderCanvas();
+  if (addToMulti) {
+    if (S.multiSelBlocks.has(blockId)) { S.multiSelBlocks.delete(blockId); }
+    else { S.multiSelBlocks.add(blockId); }
+    S.selectedBlock = null;
+  } else {
+    S.multiSel.clear(); S.multiSelBlocks.clear();
+    S.selectedBlock = (S.selectedBlock === blockId) ? null : blockId;
+  }
+  renderTree(); renderCanvas(); renderProps();
 }
 
 function ungroupSelectedBlock() {
@@ -1406,10 +1411,11 @@ function ungroupSelectedBlock() {
 }
 
 function openPutInBlock() {
-  if (S.multiSel.size < 2) return;
+  const totalSelected = S.multiSel.size + S.multiSelBlocks.size;
+  if (totalSelected < 2) return;
   document.getElementById('block-name-input').value = '';
   document.getElementById('block-name-err').textContent = '';
-  document.getElementById('block-sel-count').textContent = S.multiSel.size;
+  document.getElementById('block-sel-count').textContent = totalSelected;
   document.getElementById('modal-put-block').classList.add('open');
   setTimeout(() => document.getElementById('block-name-input').focus(), 80);
 }
@@ -1435,6 +1441,8 @@ function confirmPutInBlock() {
 
   // Keep the original selection — do NOT expand it with child block nodes
   const originalSelection = new Set(S.multiSel);
+  // Blocks explicitly selected via multiSelBlocks become direct children of the new group
+  const explicitBlockIds = new Set(S.multiSelBlocks);
 
   // Helper: all node ids reachable from a block (recursively)
   function allNodeIds(blk) {
@@ -1456,23 +1464,70 @@ function confirmPutInBlock() {
     });
   }
 
-  // A block becomes a direct child only if ALL its nodes were in the original selection
-  const directChildIds = [];
+  // Direct children = explicitly selected blocks (multiSelBlocks) +
+  // any block whose ALL nodes are in originalSelection and is not already a descendant
+  const directChildIds = [...explicitBlockIds];
   S.blocks.forEach(blk => {
+    if (explicitBlockIds.has(blk.id)) return; // already included
     const nodeSet = allNodeIds(blk);
     const allSelected = [...nodeSet].every(id => originalSelection.has(id));
     if (allSelected && !isDescendantOfAny(blk.id, directChildIds)) {
       directChildIds.push(blk.id);
-      // Do NOT add nodeSet to selectedIds — child block nodes are managed via childBlockIds
     }
   });
 
-  // nodeIds = exactly the originally selected nodes (nothing more)
-  const nodeIds = [...originalSelection];
+  // nodeIds = only the free card nodes (not belonging to any direct child block)
+  const childNodeIds = new Set();
+  directChildIds.forEach(cid => {
+    const cb = S.blocks.find(b => b.id === cid);
+    if (cb) allNodeIds(cb).forEach(id => childNodeIds.add(id));
+  });
+  const nodeIds = [...originalSelection].filter(id => !childNodeIds.has(id));
   const newBlk = { id: S.nextBlockId++, name, nodeIds, childBlockIds: directChildIds };
+
+  // ── Compute and freeze the visual rect at creation time ──
+  (function freezeRect() {
+    const HDR_H = 28;
+    const PAD   = GRID;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    nodeIds.forEach(id => {
+      const n = S.nodes.find(x => x.id === id);
+      if (!n) return;
+      const bb = getNodeAABB(n);
+      if (bb.x < minX) minX = bb.x; if (bb.y < minY) minY = bb.y;
+      if (bb.r > maxX) maxX = bb.r; if (bb.b > maxY) maxY = bb.b;
+    });
+    directChildIds.forEach(cid => {
+      const cb = S.blocks.find(b => b.id === cid);
+      if (!cb) return;
+      // Use fixedRect if available, else compute from nodes
+      if (cb.fixedRect) {
+        const cr = cb.fixedRect;
+        if (cr.x         < minX) minX = cr.x;
+        if (cr.y         < minY) minY = cr.y;
+        if (cr.x + cr.w  > maxX) maxX = cr.x + cr.w;
+        if (cr.y + cr.h  > maxY) maxY = cr.y + cr.h;
+      } else {
+        allNodeIds(cb).forEach(id => {
+          const n2 = S.nodes.find(x => x.id === id);
+          if (!n2) return;
+          const bb2 = getNodeAABB(n2);
+          if (bb2.x < minX) minX = bb2.x; if (bb2.y < minY) minY = bb2.y;
+          if (bb2.r > maxX) maxX = bb2.r; if (bb2.b > maxY) maxY = bb2.b;
+        });
+      }
+    });
+    if (!isFinite(minX)) return;
+    const rx  = Math.floor((minX - PAD) / GRID) * GRID;
+    const ry  = Math.floor((minY - PAD - HDR_H) / GRID) * GRID;
+    const rx2 = Math.ceil( (maxX + PAD) / GRID) * GRID;
+    const ry2 = Math.ceil( (maxY + PAD) / GRID) * GRID;
+    newBlk.fixedRect = { x: rx, y: ry, w: rx2 - rx, h: ry2 - ry };
+  })();
+
   S.blocks.push(newBlk);
-  S.multiSel.clear();
-  S.selected = null;
+  S.multiSel.clear(); S.multiSelBlocks.clear();
+  S.selected = null; S.selectedBlock = newBlk.id;
   closeModal('modal-put-block');
 
   // ── After creating the block, push external cards that overlap its rect away ──
@@ -1586,12 +1641,14 @@ function renderBlocks() {
   }
 
   sorted.forEach(blk => {
-    const rect = blockRect(blk);
+    // Use the frozen rect saved at creation time; fall back to dynamic only if missing
+    const rect = blk.fixedRect || blockRect(blk);
     if (!rect) return;
     const depth = blockDepth(blk);
     const { border: borderColor, bg: bgColor, hdr: hdrColor, txt: txtColor } = depthStyle(depth);
     const zIdx = (maxDepth - depth) + 1;
-    const isSelected = S.selectedBlock === blk.id;
+    const isSingleSel = S.selectedBlock === blk.id;
+    const isMultiSel  = S.multiSelBlocks.has(blk.id);
 
     const div = document.createElement('div');
     div.className = 'canvas-block';
@@ -1600,31 +1657,59 @@ function renderBlocks() {
     div.style.top         = rect.y + 'px';
     div.style.width       = rect.w + 'px';
     div.style.height      = rect.h + 'px';
-    div.style.borderColor = isSelected ? '#ffffff' : borderColor;
     div.style.background  = bgColor;
     div.style.zIndex      = zIdx;
-    if (isSelected) div.style.boxShadow = '0 0 0 3px #ffffff40';
+    if (isSingleSel) {
+      div.style.borderColor = '#ffffff';
+      div.style.boxShadow   = '0 0 0 3px #ffffff40';
+    } else if (isMultiSel) {
+      div.style.borderColor = 'var(--cyan)';
+      div.style.boxShadow   = '0 0 0 5px #4fc3f730';
+    } else {
+      div.style.borderColor = borderColor;
+      div.style.boxShadow   = '';
+    }
 
     // ── Header inside the rect ──
     const hdr = document.createElement('div');
     hdr.className = 'canvas-block-header';
-    hdr.style.borderBottomColor = isSelected ? '#ffffff' : borderColor;
+    hdr.style.borderBottomColor = isSingleSel ? '#ffffff' : isMultiSel ? 'var(--cyan)' : borderColor;
     hdr.style.background = hdrColor;
-    hdr.style.color = isSelected ? '#ffffff' : txtColor;
+    hdr.style.color = (isSingleSel || isMultiSel) ? '#ffffff' : txtColor;
     hdr.textContent = blk.name;
     div.appendChild(hdr);
 
     div.addEventListener('click', e => {
-      if (e.target !== div) return;
+      const fromHeader = e.target === hdr || hdr.contains(e.target);
+      const fromDiv    = e.target === div;
+      if (!fromDiv && !fromHeader) return;
+      if (e._dragClick) return; // suppress click after drag
       e.stopPropagation();
-      selectBlock(blk.id);
+      selectBlock(blk.id, e.ctrlKey || e.metaKey);
     });
 
     div.addEventListener('mousedown', e => {
       if (e.button !== 0) return;
       document.getElementById('cscroll').classList.add('dragging');
-      if (e.target !== div) return; // let nested blocks or cards handle their own events
+      // Allow drag from the div itself OR from its header — but NOT from nested cards/blocks
+      const fromHeader = e.target === hdr || hdr.contains(e.target);
+      const fromDiv    = e.target === div;
+      if (!fromDiv && !fromHeader) return; // let nested blocks or cards handle their own events
       e.stopPropagation(); e.preventDefault();
+      // Ctrl/Cmd+click = toggle multiSelBlocks, no drag
+      if (e.ctrlKey || e.metaKey) {
+        selectBlock(blk.id, true);
+        return;
+      }
+      // Plain click without drag: select block (handled by click event above)
+      // Ensure block is selected immediately on mousedown so drag starts from selected state
+      if (!S.multiSelBlocks.has(blk.id) && S.selectedBlock !== blk.id) {
+        selectBlock(blk.id);
+      }
+      // Also clear any card selection when clicking a block
+      if (!e.ctrlKey && !e.metaKey) {
+        S.selected = null; S.multiSel.clear();
+      }
       function collectIds(b) {
         const ids = new Set(b.nodeIds);
         (b.childBlockIds || []).forEach(cid => {
@@ -1633,7 +1718,13 @@ function renderBlocks() {
         });
         return ids;
       }
-      const nodes = [...collectIds(blk)].map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
+      // If this block is part of a multi-block selection, drag ALL selected blocks together
+      const blocksToMove = S.multiSelBlocks.has(blk.id) && S.multiSelBlocks.size > 1
+        ? [...S.multiSelBlocks].map(bid => S.blocks.find(b => b.id === bid)).filter(Boolean)
+        : [blk];
+      const allDragNodeIds = new Set();
+      blocksToMove.forEach(b => collectIds(b).forEach(id => allDragNodeIds.add(id)));
+      const nodes = [...allDragNodeIds].map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
       if (!nodes.length) return;
       const sc = document.getElementById('cscroll');
       const r2 = sc.getBoundingClientRect();
@@ -1647,6 +1738,9 @@ function renderBlocks() {
       S._dragSource = 'block';
       S._dragBlockId = blk.id;
       S._dragMoved  = false;
+      S._homeBlockBoundary = null; // block drag has no outer boundary constraint
+      // Record all dragged node IDs (needed for _dragMoved tracking; membership NOT updated for block drag)
+      S._draggedNodeIds = nodes.map(n => n.id);
       // Cache dims for ALL nodes before drag starts
       S.nodes.forEach(node => {
         const el2 = document.querySelector(`[data-id="${node.id}"]`);
@@ -3464,6 +3558,7 @@ function makeCard(n) {
     S.dragLastValidY = n.y;
     S._dragSource = 'card';
     S._dragMoved  = false;
+    S._homeBlockBoundary = null; // will be computed once below after dims are cached
 
     // Cache real dimensions for ALL nodes before drag starts so resolveOverlap uses correct sizes
     S.nodes.forEach(node => {
@@ -3475,6 +3570,38 @@ function makeCard(n) {
         }
       }
     });
+
+    // ── Freeze home-block boundary NOW (at drag-start) so it never changes during drag ──
+    {
+      const PAD_BD = 32; // same as GRID
+      let homeBlkNow = null;
+      S.blocks.forEach(blk => {
+        if (blk.nodeIds.includes(n.id)) {
+          if (!homeBlkNow) { homeBlkNow = blk; }
+          else {
+            const homeIsParent = (homeBlkNow.childBlockIds || []).includes(blk.id);
+            if (homeIsParent) homeBlkNow = blk;
+          }
+        }
+      });
+      if (homeBlkNow) {
+        const allM = homeBlkNow.nodeIds.map(id => S.nodes.find(x => x.id === id)).filter(Boolean);
+        let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity;
+        allM.forEach(m => {
+          const bb = getCardAABB(m);
+          if (bb.x < bx1) bx1 = bb.x; if (bb.y < by1) by1 = bb.y;
+          if (bb.x + bb.w > bx2) bx2 = bb.x + bb.w; if (bb.y + bb.h > by2) by2 = bb.y + bb.h;
+        });
+        if (isFinite(bx1)) {
+          S._homeBlockBoundary = {
+            left:   bx1 - PAD_BD,
+            top:    by1 - PAD_BD,
+            right:  bx2 + PAD_BD,
+            bottom: by2 + PAD_BD
+          };
+        }
+      }
+    }
 
     if (S.multiSel.has(n.id)) {
       S.dragOffsets = [];
@@ -3662,11 +3789,12 @@ function updateBlockMembership(movedIds) {
       const wasInside  = blk.nodeIds.includes(nodeId);
       const isInsideNow = cx >= fr.x && cx <= fr.r && cy >= fr.y && cy <= fr.b;
 
-      if (wasInside && !isInsideNow) {
-        blk.nodeIds = blk.nodeIds.filter(id => id !== nodeId);
-      } else if (!wasInside && isInsideNow) {
+      // A node that was INSIDE a block cannot exit via drag (boundary was enforced during drag).
+      // Only allow JOINING a block (entering), never forced removal via drag.
+      if (!wasInside && isInsideNow) {
         blk.nodeIds = [...blk.nodeIds, nodeId];
       }
+      // Note: removal from a block only happens via explicit ungroup/delete, not drag.
     });
   });
 
@@ -3773,21 +3901,35 @@ document.addEventListener('mousemove', e => {
           if (rectsOverlap(dbRect, or)) { hasOverlap = true; break; }
         }
 
-        // Check dragged block rect vs every sibling block rect
+        // Check dragged block rect vs every sibling block rect.
+        // Use fixedRect directly (already includes PAD+HDR); fallback computes all nodes recursively.
         if (!hasOverlap) {
+          function allNodesOfBlk(b) {
+            const ids = new Set(b.nodeIds);
+            (b.childBlockIds || []).forEach(cid => {
+              const cb = S.blocks.find(x => x.id === cid);
+              if (cb) allNodesOfBlk(cb).forEach(id => ids.add(id));
+            });
+            return ids;
+          }
           for (const otherBlk of S.blocks) {
             if (relatedIds.has(otherBlk.id)) continue;
-            const onodes = otherBlk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
-            if (!onodes.length) continue;
-            let ox1 = Infinity, oy1 = Infinity, ox2 = -Infinity, oy2 = -Infinity;
-            onodes.forEach(n => {
-              const bb = getCardAABB(n);
-              if (bb.x < ox1) ox1 = bb.x; if (bb.y < oy1) oy1 = bb.y;
-              if (bb.x + bb.w > ox2) ox2 = bb.x + bb.w; if (bb.y + bb.h > oy2) oy2 = bb.y + bb.h;
-            });
-            const oAABB = { x: ox1 - PAD, y: oy1 - PAD - HDR_H,
-                            w: (ox2 - ox1) + PAD * 2, h: (oy2 - oy1) + PAD * 2 + HDR_H };
-            if (rectsOverlap(dbRect, oAABB)) { hasOverlap = true; break; }
+            let oRect = otherBlk.fixedRect;
+            if (!oRect) {
+              const allIds = allNodesOfBlk(otherBlk);
+              let ox1 = Infinity, oy1 = Infinity, ox2 = -Infinity, oy2 = -Infinity;
+              allIds.forEach(id => {
+                const n2 = S.nodes.find(x => x.id === id);
+                if (!n2) return;
+                const bb = getCardAABB(n2);
+                if (bb.x < ox1) ox1 = bb.x; if (bb.y < oy1) oy1 = bb.y;
+                if (bb.x + bb.w > ox2) ox2 = bb.x + bb.w; if (bb.y + bb.h > oy2) oy2 = bb.y + bb.h;
+              });
+              if (!isFinite(ox1)) continue;
+              oRect = { x: ox1 - PAD, y: oy1 - PAD - HDR_H,
+                        w: (ox2 - ox1) + PAD * 2, h: (oy2 - oy1) + PAD * 2 + HDR_H };
+            }
+            if (rectsOverlap(dbRect, oRect)) { hasOverlap = true; break; }
           }
         }
       }
@@ -3814,24 +3956,28 @@ document.addEventListener('mousemove', e => {
 
       if (homeBlk) {
         // ── Card is INSIDE a block ──
-        // Compute current block inner rect (frozen — block does NOT resize during drag)
-        // Use all members INCLUDING the dragged card at their current positions
-        // to define the block's fixed boundary.
+        // Use the boundary frozen at drag-start (S._homeBlockBoundary) so it never expands.
         const allMembers = homeBlk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
-        let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity;
-        allMembers.forEach(n => {
-          const bb = getCardAABB(n);
-          if (bb.x < bx1) bx1 = bb.x; if (bb.y < by1) by1 = bb.y;
-          if (bb.x + bb.w > bx2) bx2 = bb.x + bb.w; if (bb.y + bb.h > by2) by2 = bb.y + bb.h;
-        });
-        // Block inner boundary (with PAD, below header)
-        const innerLeft   = bx1 - PAD;
-        const innerTop    = by1 - PAD;
-        const innerRight  = bx2 + PAD;
-        const innerBottom = by2 + PAD;
+        const coMembers  = allMembers.filter(n => !draggedIds.has(n.id));
 
-        // Co-members are obstacles (no overlapping each other)
-        const coMembers = allMembers.filter(n => !draggedIds.has(n.id));
+        // Prefer the pre-frozen boundary; fall back to static-members only if unavailable.
+        let innerLeft, innerTop, innerRight, innerBottom;
+        if (S._homeBlockBoundary) {
+          innerLeft   = S._homeBlockBoundary.left;
+          innerTop    = S._homeBlockBoundary.top;
+          innerRight  = S._homeBlockBoundary.right;
+          innerBottom = S._homeBlockBoundary.bottom;
+        } else {
+          // Fallback: build from static co-members (at least this doesn't expand)
+          let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity;
+          coMembers.forEach(m => {
+            const bb = getCardAABB(m);
+            if (bb.x < bx1) bx1 = bb.x; if (bb.y < by1) by1 = bb.y;
+            if (bb.x + bb.w > bx2) bx2 = bb.x + bb.w; if (bb.y + bb.h > by2) by2 = bb.y + bb.h;
+          });
+          innerLeft   = bx1 - PAD; innerTop    = by1 - PAD;
+          innerRight  = bx2 + PAD; innerBottom = by2 + PAD;
+        }
 
         outer: for (const { node, cx, cy } of candidates) {
           const dr = getCardAABB(node, cx, cy);
@@ -3863,22 +4009,16 @@ document.addEventListener('mousemove', e => {
           }
         }
 
-        // Card vs block rects
+        // Card vs block rects — use fixedRect (authoritative, includes PAD+HDR)
         if (!hasOverlap) {
           for (const { node, cx, cy } of candidates) {
             const dr = getCardAABB(node, cx, cy);
             for (const blk of S.blocks) {
-              const bnodes = blk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
-              if (!bnodes.length) continue;
-              let ox1 = Infinity, oy1 = Infinity, ox2 = -Infinity, oy2 = -Infinity;
-              bnodes.forEach(n => {
-                const bb = getCardAABB(n);
-                if (bb.x < ox1) ox1 = bb.x; if (bb.y < oy1) oy1 = bb.y;
-                if (bb.x + bb.w > ox2) ox2 = bb.x + bb.w; if (bb.y + bb.h > oy2) oy2 = bb.y + bb.h;
-              });
-              const blkRect = { x: ox1 - PAD, y: oy1 - PAD - HDR_H,
-                                w: (ox2 - ox1) + PAD * 2, h: (oy2 - oy1) + PAD * 2 + HDR_H };
-              if (rectsOverlap(dr, blkRect)) { hasOverlap = true; break; }
+              // Skip the block this card belongs to (it's already inside, inner boundary enforced above)
+              if (blk.nodeIds.includes(node.id)) continue;
+              let bRect = blk.fixedRect;
+              if (!bRect) continue; // no rect computed yet, skip
+              if (rectsOverlap(dr, bRect)) { hasOverlap = true; break; }
             }
             if (hasOverlap) break;
           }
@@ -3897,6 +4037,47 @@ document.addEventListener('mousemove', e => {
       S.dragLastValidX = nx;
       S.dragLastValidY = ny;
       S._dragMoved = true;
+
+      // ── Block drag: update fixedRect of ALL moved blocks so the visual follows the cards ──
+      if (isBlockDrag) {
+        const HDR_H = 28;
+        function refreshBlockRect(blk) {
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          blk.nodeIds.forEach(id => {
+            const n2 = S.nodes.find(x => x.id === id);
+            if (!n2) return;
+            const bb = getCardAABB(n2);
+            if (bb.x < minX) minX = bb.x; if (bb.y < minY) minY = bb.y;
+            if (bb.x + bb.w > maxX) maxX = bb.x + bb.w; if (bb.y + bb.h > maxY) maxY = bb.y + bb.h;
+          });
+          (blk.childBlockIds || []).forEach(cid => {
+            const cb = S.blocks.find(b => b.id === cid);
+            if (cb) refreshBlockRect(cb); // refresh children first
+            if (cb && cb.fixedRect) {
+              const cr = cb.fixedRect;
+              if (cr.x < minX) minX = cr.x; if (cr.y < minY) minY = cr.y;
+              if (cr.x + cr.w > maxX) maxX = cr.x + cr.w; if (cr.y + cr.h > maxY) maxY = cr.y + cr.h;
+            }
+          });
+          if (!isFinite(minX)) return;
+          const rx  = Math.floor((minX - GRID) / GRID) * GRID;
+          const ry  = Math.floor((minY - GRID - HDR_H) / GRID) * GRID;
+          const rx2 = Math.ceil( (maxX + GRID) / GRID) * GRID;
+          const ry2 = Math.ceil( (maxY + GRID) / GRID) * GRID;
+          blk.fixedRect = { x: rx, y: ry, w: rx2 - rx, h: ry2 - ry };
+        }
+        // Refresh ONLY the dragged block and its descendants — never ancestors.
+        // Ancestor (parent) fixedRect must stay frozen during drag so the parent border never changes.
+        function refreshDescendantsAndSelf(blk) {
+          (blk.childBlockIds || []).forEach(cid => {
+            const cb = S.blocks.find(b => b.id === cid);
+            if (cb) refreshDescendantsAndSelf(cb);
+          });
+          refreshBlockRect(blk);
+        }
+        const draggedBlk = S.blocks.find(b => b.id === S._dragBlockId);
+        if (draggedBlk) refreshDescendantsAndSelf(draggedBlk);
+      }
 
       // ── Live membership: only when card is on canvas (not inside a block) ──
       // When a card is inside a block, it stays in the block — no live resize.
@@ -3941,25 +4122,59 @@ document.addEventListener('mousemove', e => {
     rb.style.left   = (rx * S.zoom) + 'px'; rb.style.top    = (ry * S.zoom) + 'px';
     rb.style.width  = (rw * S.zoom) + 'px'; rb.style.height = (rh * S.zoom) + 'px';
 
-    S.multiSel.clear();
+    S.multiSel.clear(); S.multiSelBlocks.clear();
+
+    // Helper: collect ALL node IDs in a block recursively (incl. child blocks)
+    function collectAllNodeIds(b) {
+      const ids = new Set(b.nodeIds);
+      (b.childBlockIds || []).forEach(cid => {
+        const cb = S.blocks.find(x => x.id === cid);
+        if (cb) collectAllNodeIds(cb).forEach(id => ids.add(id));
+      });
+      return ids;
+    }
+    // Helper: collect ALL block IDs in a block recursively (self + descendants)
+    function collectAllBlockIds(b) {
+      const ids = new Set([b.id]);
+      (b.childBlockIds || []).forEach(cid => {
+        const cb = S.blocks.find(x => x.id === cid);
+        if (cb) collectAllBlockIds(cb).forEach(id => ids.add(id));
+      });
+      return ids;
+    }
+
+    // First pass: find top-level blocks hit by rubber-band (not children of another hit block)
+    // A block is "top-level hit" if its fixedRect intersects the rubber-band
+    // AND it is not already covered by a parent block that also hit.
+    const hitBlockIds = new Set();
+    S.blocks.forEach(blk => {
+      const rect = blk.fixedRect;
+      if (!rect) return;
+      const hit = rect.x < rx+rw && rect.x+rect.w > rx && rect.y < ry+rh && rect.y+rect.h > ry;
+      if (hit) hitBlockIds.add(blk.id);
+    });
+
+    // For every hit block: add it AND all its descendants to multiSelBlocks,
+    // so every block in the selection shows the selection border.
+    hitBlockIds.forEach(bid => {
+      const blk = S.blocks.find(b => b.id === bid);
+      if (!blk) return;
+      collectAllBlockIds(blk).forEach(id => S.multiSelBlocks.add(id));
+    });
+
+    // Build the set of ALL node IDs that belong to ANY block (selected or not).
+    // Cards inside any block must NEVER receive sel-multi — only the block border gets highlighted.
+    const allBlockedNodeIds = new Set();
+    S.blocks.forEach(blk => collectAllNodeIds(blk).forEach(id => allBlockedNodeIds.add(id)));
+
+    // Second pass: add only truly free nodes (not belonging to ANY block) to multiSel
     S.nodes.forEach(n => {
+      if (allBlockedNodeIds.has(n.id)) return; // inside a block — skip, block handles selection display
       const bb = getCardAABB(n);
       if (!bb) return;
       if (bb.x < rx+rw && bb.x+bb.w > rx && bb.y < ry+rh && bb.y+bb.h > ry) S.multiSel.add(n.id);
     });
-    // Also: if rubber-band intersects a block's bounding box, select ALL its nodes
-    S.blocks.forEach(blk => {
-      const blockNodes = blk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
-      if (blockNodes.length === 0) return;
-      let bMinX = Infinity, bMinY = Infinity, bMaxX = -Infinity, bMaxY = -Infinity;
-      blockNodes.forEach(n => {
-        const bb = getNodeAABB(n);
-        if (bb.x < bMinX) bMinX = bb.x; if (bb.y < bMinY) bMinY = bb.y;
-        if (bb.r > bMaxX) bMaxX = bb.r; if (bb.b > bMaxY) bMaxY = bb.b;
-      });
-      const hit = bMinX < rx+rw && bMaxX > rx && bMinY < ry+rh && bMaxY > ry;
-      if (hit) blk.nodeIds.forEach(id => S.multiSel.add(id));
-    });
+
     S.selected = null;
     renderCanvas();
   }
@@ -3977,12 +4192,53 @@ document.addEventListener('mouseup', e => {
     return;
   }
   document.getElementById('cscroll').classList.remove('dragging');
-  S.drag = null; S.dragOffsets = []; S._dragSource = null; S._dragBlockId = null;
+  const wasBlockDrag = S._dragSource === 'block';
+  const wasBlockDragId = S._dragBlockId;
+  const wasDragMoved = S._dragMoved;
+  S.drag = null; S.dragOffsets = []; S._dragSource = null; S._dragBlockId = null; S._homeBlockBoundary = null;
   sc.classList.remove('rubber-sel');
   expandCanvasIfNeeded();
 
-  // ── After drag: update block membership only if cards actually moved ──
-  if (S._draggedNodeIds && S._draggedNodeIds.length > 0 && S._dragMoved) {
+  // ── After block drag: rebuild fixedRect of all ancestor blocks (bottom-up) ──
+  if (wasBlockDrag && wasBlockDragId && S._dragMoved) {
+    const HDR_H = 28;
+    function rebuildFixedRect(blk) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      blk.nodeIds.forEach(id => {
+        const n2 = S.nodes.find(x => x.id === id);
+        if (!n2) return;
+        const bb = getNodeAABB(n2);
+        if (bb.x < minX) minX = bb.x; if (bb.y < minY) minY = bb.y;
+        if (bb.r > maxX) maxX = bb.r; if (bb.b > maxY) maxY = bb.b;
+      });
+      (blk.childBlockIds || []).forEach(cid => {
+        const cb = S.blocks.find(b => b.id === cid);
+        if (!cb || !cb.fixedRect) return;
+        const cr = cb.fixedRect;
+        if (cr.x < minX) minX = cr.x; if (cr.y < minY) minY = cr.y;
+        if (cr.x + cr.w > maxX) maxX = cr.x + cr.w; if (cr.y + cr.h > maxY) maxY = cr.y + cr.h;
+      });
+      if (!isFinite(minX)) return;
+      const rx  = Math.floor((minX - GRID) / GRID) * GRID;
+      const ry  = Math.floor((minY - GRID - HDR_H) / GRID) * GRID;
+      const rx2 = Math.ceil( (maxX + GRID) / GRID) * GRID;
+      const ry2 = Math.ceil( (maxY + GRID) / GRID) * GRID;
+      blk.fixedRect = { x: rx, y: ry, w: rx2 - rx, h: ry2 - ry };
+    }
+    // Rebuild ancestors bottom-up: find parent chain of wasBlockDragId
+    function rebuildAncestors(blkId) {
+      S.blocks.forEach(b => {
+        if ((b.childBlockIds || []).includes(blkId)) {
+          rebuildAncestors(b.id); // recurse up first
+          rebuildFixedRect(b);    // then rebuild this ancestor
+        }
+      });
+    }
+    rebuildAncestors(wasBlockDragId);
+  }
+
+  // ── After drag: update block membership only if cards actually moved (card drag only, not block drag) ──
+  if (S._draggedNodeIds && S._draggedNodeIds.length > 0 && S._dragMoved && !wasBlockDrag) {
     updateBlockMembership(S._draggedNodeIds);
     renderTree();
   }
@@ -3991,20 +4247,35 @@ document.addEventListener('mouseup', e => {
   if (S.rubber) {
     S.rubber = null;
     document.getElementById('rubber-band').style.display = 'none';
-    // If only one node selected via rubber-band, promote to single select
-    if (S.multiSel.size === 1) {
+    // If only one node selected via rubber-band (no blocks), promote to single select
+    if (S.multiSel.size === 1 && S.multiSelBlocks.size === 0) {
       S.selected = [...S.multiSel][0];
-      S.multiSel.clear();
+      S.multiSel.clear(); S.multiSelBlocks.clear();
     }
     renderTree(); renderCanvas(); renderProps();
     return;
   }
-  // Click on empty canvas (not on a card or block) = deselect all
-  if (e.button === 0 && !e.target.closest('.ub-card') && !e.target.closest('.canvas-block') && e.target.closest('#cscroll')) {
-    if (S.selected !== null || S.multiSel.size > 0 || S.selectedBlock !== null) {
-      S.selected = null; S.multiSel.clear(); S.selectedBlock = null;
-      document.activeElement?.blur();
-      renderTree(); renderCanvas(); renderProps();
+  // Click on canvas (not on a card) = deselect all cards and groups.
+  // Note: clicking on a .canvas-block is handled by its own click listener (selectBlock),
+  // but if that click was NOT on a card, we still clear card selection here.
+  // If the click was on empty canvas (not card, not block) → clear everything.
+  if (e.button === 0 && e.target.closest('#cscroll') && !wasDragMoved) {
+    const onCard  = !!e.target.closest('.ub-card');
+    const onBlock = !!e.target.closest('.canvas-block');
+    if (!onCard && !onBlock) {
+      // Clicked truly empty canvas — clear all selections
+      if (S.selected !== null || S.multiSel.size > 0 || S.selectedBlock !== null || S.multiSelBlocks.size > 0) {
+        S.selected = null; S.multiSel.clear(); S.multiSelBlocks.clear(); S.selectedBlock = null;
+        document.activeElement?.blur();
+        renderTree(); renderCanvas(); renderProps();
+      }
+    } else if (!onCard && onBlock) {
+      // Clicked on a block's background area — the block's own click handler fires separately.
+      // We only need to clear card selection here (block selection handled by selectBlock).
+      if (S.selected !== null || S.multiSel.size > 0) {
+        S.selected = null; S.multiSel.clear();
+        renderTree(); renderCanvas(); renderProps();
+      }
     }
   }
 });
@@ -4096,6 +4367,35 @@ function select(id, addToMulti) {
 
 function renderProps() {
   const body = document.getElementById('prop-body');
+  // If a block is single-selected, show its properties
+  if (S.selectedBlock !== null) {
+    const blk = S.blocks.find(b => b.id === S.selectedBlock);
+    if (blk) {
+      body.innerHTML = `
+        <div class="prop-grp">
+          <label class="prop-lbl">Group Name</label>
+          <input class="prop-in" id="pp-blk-name" value="${blk.name}"
+            oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')"
+            onblur="(function(){const b=S.blocks.find(x=>x.id===${blk.id});if(b){b.name=document.getElementById('pp-blk-name').value||b.name;renderTree();renderCanvas();}})()"
+            onkeydown="if(event.key==='Enter')this.blur()" />
+        </div>
+        <div class="prop-grp">
+          <label class="prop-lbl">Members</label>
+          <input class="prop-in" value="${blk.nodeIds.length} node(s)" disabled />
+        </div>
+        <div class="prop-grp">
+          <label class="prop-lbl">Type</label>
+          <input class="prop-in" value="Group" disabled />
+        </div>
+        <div style="margin-top:8px">
+          <button class="btn" onclick="ungroupSelectedBlock()"
+            style="background:#7a3090;color:#fff;border:none;padding:5px 14px;border-radius:var(--radius);cursor:pointer;font-size:12px;font-weight:600;width:100%">
+            ⬡ Ungroup
+          </button>
+        </div>`;
+      return;
+    }
+  }
   const n = S.nodes.find(n=>n.id===S.selected);
   if (!n) { body.innerHTML=`<div class="prop-empty"><div class="peicon">◫</div><p>Select a node<br>to edit its properties</p></div>`; return; }
 
@@ -5454,30 +5754,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 
 
-<script>
-// ---- FIX: prevent group auto-resize when children move ----
-(function(){
-  function freezeGroupSizes(){
-    if(!window.S || !S.nodes) return;
-    for(const n of S.nodes){
-      if(n.type==="group" || n.kind==="group"){
-        if(n._fixedW===undefined){
-          n._fixedW = n.w;
-          n._fixedH = n.h;
-        }else{
-          n.w = n._fixedW;
-          n.h = n._fixedH;
-        }
-      }
-    }
-  }
-  function loop(){
-    try{ freezeGroupSizes(); }catch(e){}
-    requestAnimationFrame(loop);
-  }
-  requestAnimationFrame(loop);
-})();
-</script>
+
 
 </body>
 </html>
