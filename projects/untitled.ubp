@@ -3,14 +3,46 @@
   "nodes": [
     {
       "id": 1,
+      "layer": "mal",
+      "name": "GTM",
+      "type": "segment",
+      "memType": "RAM",
+      "segAddr": "0xFF001000",
+      "segSize": 4096,
+      "segDefault": "0x00",
+      "desc": "",
+      "x": 1664,
+      "y": 608,
+      "_uw": 224,
+      "_uh": 160,
+      "rotation": 0
+    },
+    {
+      "id": 2,
+      "layer": "mal",
+      "name": "RAM1",
+      "type": "segment",
+      "memType": "RAM",
+      "segAddr": "0xF0001000",
+      "segSize": 32768,
+      "segDefault": "0x00",
+      "desc": "",
+      "x": 1440,
+      "y": 416,
+      "_uw": 224,
+      "_uh": 160,
+      "rotation": 0
+    },
+    {
+      "id": 3,
       "layer": "ral",
-      "name": "SENT",
-      "baseName": "SENT",
+      "name": "UIOPPP",
+      "baseName": "UIOPPP",
       "type": "register",
       "regType": "MMIO",
       "regSize": 32,
       "coreVal": null,
-      "regAddr": "0xFF330000",
+      "regAddr": "0x00000000",
       "accessWidths": [
         32
       ],
@@ -22,7 +54,7 @@
       "bitfields": [
         {
           "_id": 0,
-          "name": "SENT",
+          "name": "UIOPPP",
           "bitStart": 0,
           "bitEnd": 31,
           "access": "RW",
@@ -31,38 +63,24 @@
         }
       ],
       "_nextBfId": 1,
-      "x": 384,
-      "y": 384,
+      "x": 848,
+      "y": 496,
       "_uw": 608,
-      "_uh": 256
+      "_uh": 256,
+      "rotation": 90
     },
     {
-      "id": 2,
+      "id": 4,
       "layer": "mal",
-      "name": "RAM1",
-      "type": "segment",
-      "memType": "RAM",
-      "segAddr": "0xF0001000",
-      "segSize": 4096,
-      "segDefault": "0x00",
-      "desc": "",
-      "x": 128,
-      "y": 160,
-      "_uw": 224,
-      "_uh": 160
-    },
-    {
-      "id": 3,
-      "layer": "mal",
-      "name": "GM_RAM4",
+      "name": "BOOTA",
       "type": "segment",
       "memType": "RAM",
       "segAddr": "0xFE400010",
-      "segSize": 4096,
+      "segSize": 1048576,
       "segDefault": "0x00",
       "desc": "",
-      "x": 512,
-      "y": 736,
+      "x": 448,
+      "y": 192,
       "_uw": 224,
       "_uh": 160
     }
@@ -70,20 +88,36 @@
   "blocks": [
     {
       "id": 1,
-      "name": "IOPT",
+      "name": "NJUIO",
       "nodeIds": [
         1,
         2
       ],
       "childBlockIds": [],
       "fixedRect": {
-        "x": 96,
-        "y": 96,
-        "w": 928,
-        "h": 576
+        "x": 1328,
+        "y": 240,
+        "w": 544,
+        "h": 512
+      }
+    },
+    {
+      "id": 2,
+      "name": "LPOWWWE",
+      "nodeIds": [
+        3
+      ],
+      "childBlockIds": [
+        1
+      ],
+      "fixedRect": {
+        "x": 688,
+        "y": 176,
+        "w": 1216,
+        "h": 608
       }
     }
   ],
-  "nextId": 4,
-  "nextBlockId": 2
+  "nextId": 5,
+  "nextBlockId": 3
 }

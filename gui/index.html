@@ -279,7 +279,7 @@ body {
 .tree-item:hover .ti-del { opacity: 1; }
 .ti-del:hover { color: var(--red) !important; }
 
-.tree-add { display: flex; align-items: center; gap: 5px; padding: 5px 8px; border-radius: var(--radius); cursor: pointer; font-size: 11px; font-weight: 600; color: #fff; background: var(--blue-soft); border: 1px solid var(--blue-dim); transition: background 0.1s; margin: 3px 4px; }
+.tree-add { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 5px 8px; border-radius: var(--radius); cursor: pointer; font-size: 11px; font-weight: 600; color: #fff; background: var(--blue-soft); border: 1px solid var(--blue-dim); transition: background 0.1s; margin: 3px 4px; box-sizing: border-box; width: calc(100% - 8px); }
 .tree-add:hover { background: var(--blue); color: #fff; }
 .tree-add.ral { background: var(--cyan-dim); border-color: var(--cyan-dim); color: #e0f7ff; }
 .tree-add.ral:hover { background: #1a7aa0; color: #fff; }
@@ -455,25 +455,27 @@ body {
 
 /* Group / Ungroup tree buttons — same layout as .tree-add */
 .tree-block-btn {
-  display: flex; align-items: center; gap: 5px;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
   padding: 5px 8px; border-radius: var(--radius);
   cursor: pointer; font-size: 11px; font-weight: 600;
   color: #fff; background: #c05000;
   border: 1px solid #e06010;
   transition: background 0.1s; margin: 3px 4px;
+  box-sizing: border-box; width: calc(100% - 8px);
 }
 .tree-block-btn:hover { background: #e07020; }
 .tree-ungroup-btn {
-  display: flex; align-items: center; gap: 5px;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
   padding: 5px 8px; border-radius: var(--radius);
   cursor: pointer; font-size: 11px; font-weight: 600;
   color: #fff; background: #5a3080;
   border: 1px solid #7a50a0;
   transition: background 0.1s; margin: 3px 4px;
+  box-sizing: border-box; width: calc(100% - 8px);
 }
 .tree-ungroup-btn:hover { background: #7a50a0; }
 
-.ch { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; user-select: none; }
+.ch { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; user-select: none; min-width: 0; overflow: hidden; }
 .card-edit-btn {
   margin-left: auto; flex-shrink: 0;
   background: transparent; border: 1px solid transparent;
@@ -500,7 +502,7 @@ body {
 .card-rot-btn:hover { background: var(--bg4); color: var(--blue); border-color: var(--border2); }
 .ch.mal { background: #252a45; }
 .ch.ral { background: #1e2d3a; }
-.ctitle { font-size: 12px; font-weight: 600; font-family: var(--font-code); flex: 1; }
+.ctitle { font-size: 12px; font-weight: 600; font-family: var(--font-code); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ch.mal .ctitle { color: var(--blue); }
 .ch.ral .ctitle { color: var(--cyan); }
 .ch.mal .cbadge { background: #2a3060; color: var(--blue); }
@@ -736,7 +738,7 @@ body {
     <div class="mbody">
       <div class="prop-grp">
         <label class="prop-lbl">Segment ID</label>
-        <input class="prop-in" id="mal-id" placeholder="e.g. SEG_GPIO" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');clearFieldError('mal-id-err')" />
+        <input class="prop-in" id="mal-id" maxlength="16" placeholder="e.g. SEG_GPIO" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');clearFieldError('mal-id-err')" />
         <span class="field-err" id="mal-id-err"></span>
       </div>
       <div class="prop-grp">
@@ -751,7 +753,7 @@ body {
       </div>
       <div class="prop-grp">
         <label class="prop-lbl">Start Address (hex)</label>
-        <input class="prop-in" id="mal-addr" placeholder="e.g. 0x40020000" oninput="clearFieldError('mal-addr-err')" />
+        <input class="prop-in" id="mal-addr" placeholder="e.g. 0x40020000" oninput="onHexInput(this,'mal-addr-err');clearFieldError('mal-addr-err')" />
         <span class="field-err" id="mal-addr-err"></span>
       </div>
       <div class="prop-grp">
@@ -761,7 +763,7 @@ body {
       </div>
       <div class="prop-grp" id="mal-default-grp">
         <label class="prop-lbl">Fill byte (hex)</label>
-        <input class="prop-in" id="mal-default" placeholder="e.g. 0x00" />
+        <input class="prop-in" id="mal-default" placeholder="e.g. 0x00" oninput="onHexInput(this,null)" />
       </div>
       <div class="prop-grp">
         <label class="prop-lbl">Description</label>
@@ -785,7 +787,7 @@ body {
     <div class="mbody" style="max-height:70vh;overflow-y:auto">
       <div class="prop-grp">
         <label class="prop-lbl">Name <span style="color:var(--red)">*</span></label>
-        <input class="prop-in" id="ral-name" placeholder="e.g. CTRL_REG" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');clearFieldError('ral-name-err');renderModalBitfields()" />
+        <input class="prop-in" id="ral-name" maxlength="16" placeholder="e.g. CTRL_REG" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');clearFieldError('ral-name-err');renderModalBitfields()" />
         <span class="field-err" id="ral-name-err"></span>
       </div>
       <div class="prop-grp">
@@ -810,7 +812,7 @@ body {
       </div>
       <div class="prop-grp" id="ral-addr-grp">
         <label class="prop-lbl">Base Address (hex) <span style="color:var(--red)">*</span></label>
-        <input class="prop-in" id="ral-addr" placeholder="e.g. 0x40020000" oninput="clearFieldError('ral-addr-err')" />
+        <input class="prop-in" id="ral-addr" placeholder="e.g. 0x40020000" oninput="onHexInput(this,'ral-addr-err');clearFieldError('ral-addr-err')" />
         <span class="field-err" id="ral-addr-err"></span>
       </div>
       <div class="prop-grp" id="ral-access-grp">
@@ -819,7 +821,7 @@ body {
       </div>
       <div class="prop-grp">
         <label class="prop-lbl">Value After Reset (hex)</label>
-        <input class="prop-in" id="ral-reset" placeholder="e.g. 0x00000000" value="0x00000000" />
+        <input class="prop-in" id="ral-reset" placeholder="e.g. 0x00000000" value="0x00000000" oninput="onHexInput(this,null)" />
       </div>
       <div class="prop-grp">
         <label class="prop-lbl">Access Type</label>
@@ -832,7 +834,7 @@ body {
       </div>
       <div class="prop-grp" id="ral-default-bf-reserved-val-grp" style="display:none">
         <label class="prop-lbl">Reserved Default Value (hex)</label>
-        <input class="prop-in" id="ral-default-bf-reserved-val" placeholder="e.g. 0x00000000" value="0x00000000" oninput="renderModalBitfields()" />
+        <input class="prop-in" id="ral-default-bf-reserved-val" placeholder="e.g. 0x00000000" value="0x00000000" oninput="onHexInput(this,null);renderModalBitfields()" />
       </div>
       <div class="prop-grp">
         <label class="prop-lbl">Description</label>
@@ -915,7 +917,7 @@ body {
     <div class="mbody">
       <div class="prop-grp">
         <label class="prop-lbl">Segment ID</label>
-        <input class="prop-in" id="edit-mal-id" placeholder="e.g. SEG_GPIO" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');clearFieldError('edit-mal-id-err')" />
+        <input class="prop-in" id="edit-mal-id" maxlength="16" placeholder="e.g. SEG_GPIO" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');clearFieldError('edit-mal-id-err')" />
         <span class="field-err" id="edit-mal-id-err"></span>
       </div>
       <div class="prop-grp">
@@ -930,7 +932,7 @@ body {
       </div>
       <div class="prop-grp">
         <label class="prop-lbl">Start Address (hex)</label>
-        <input class="prop-in" id="edit-mal-addr" placeholder="e.g. 0x40020000" oninput="clearFieldError('edit-mal-addr-err')" />
+        <input class="prop-in" id="edit-mal-addr" placeholder="e.g. 0x40020000" oninput="onHexInput(this,'edit-mal-addr-err');clearFieldError('edit-mal-addr-err')" />
         <span class="field-err" id="edit-mal-addr-err"></span>
       </div>
       <div class="prop-grp">
@@ -940,7 +942,7 @@ body {
       </div>
       <div class="prop-grp" id="edit-mal-default-grp">
         <label class="prop-lbl">Fill byte (hex)</label>
-        <input class="prop-in" id="edit-mal-default" placeholder="e.g. 0x00" />
+        <input class="prop-in" id="edit-mal-default" placeholder="e.g. 0x00" oninput="onHexInput(this,null)" />
       </div>
       <div class="prop-grp">
         <label class="prop-lbl">Description</label>
@@ -964,7 +966,7 @@ body {
     <div class="mbody">
       <div class="prop-grp">
         <label class="prop-lbl">Name</label>
-        <input class="prop-in" id="edit-ral-name" placeholder="e.g. CTRL_REG" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');clearFieldError('edit-ral-name-err')" />
+        <input class="prop-in" id="edit-ral-name" maxlength="16" placeholder="e.g. CTRL_REG" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');clearFieldError('edit-ral-name-err')" />
         <span class="field-err" id="edit-ral-name-err"></span>
       </div>
       <div class="prop-grp">
@@ -985,6 +987,38 @@ body {
 
 <script>
 const GRID = 32;
+
+/* ── Hex input normaliser ────────────────────────────────────────────────
+ * Keeps exactly "0x" (lowercase x) then uppercase hex digits A-F.
+ * Strips all other chars.  Returns normalised string (no leading 0x for
+ * bare values, so parseHex can still handle them).
+ * ─────────────────────────────────────────────────────────────────────── */
+function normHexInput(raw) {
+  // Separate optional "0x" / "0X" prefix from the rest
+  const s = raw.replace(/[^0-9A-Fa-fxX]/g, '');
+  const hasPfx = s.startsWith('0x') || s.startsWith('0X');
+  const digits = (hasPfx ? s.slice(2) : s).replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+  return hasPfx ? '0x' + digits : digits;
+}
+
+/* Normalise a hex <input> in-place and optionally show/clear a border. */
+function onHexInput(inp, errId) {
+  const pos = inp.selectionStart;
+  const norm = normHexInput(inp.value);
+  if (inp.value !== norm) inp.value = norm;
+  // Restore caret (rough: clamp to length)
+  try { inp.setSelectionRange(Math.min(pos, norm.length), Math.min(pos, norm.length)); } catch(_) {}
+  // Validate: empty is allowed while typing; non-empty must parse
+  if (errId) {
+    const v = norm.trim();
+    if (v === '' || v === '0x') {
+      inp.style.borderColor = '';
+    } else {
+      const n = parseInt(v.startsWith('0x') ? v : '0x' + v, 16);
+      inp.style.borderColor = isNaN(n) ? 'var(--red)' : '';
+    }
+  }
+}
 const S = { project:'untitled', nodes:[], blocks:[], selected:null, selectedBlock:null, multiSel:new Set(), multiSelBlocks:new Set(), nextId:1, nextBlockId:1, adding:null, editing:null, drag:null, dragOX:0, dragOY:0, dragOffsets:[], snapEnabled:true, view:'design', rubber:null, zoom:1, pan:null, ctrlDown:false, _dragMoved:false };
 const RAL_TYPES = ['register','bitfield','register_group','peripheral_block'];
 
@@ -1389,24 +1423,182 @@ function ungroupSelectedBlock() {
   const blk = S.blocks.find(b => b.id === S.selectedBlock);
   if (!blk) { S.selectedBlock = null; return; }
 
-  // Find if this block is a child of any parent block
+  const HDR_H = 28;
+  const PAD   = GRID;
+
+  // Find direct parent (if any)
   const parent = S.blocks.find(b => (b.childBlockIds || []).includes(blk.id));
 
+  // ── Helpers ──────────────────────────────────────────────────────────
+
+  function allNodeIdsOf(b) {
+    const ids = new Set(b.nodeIds);
+    (b.childBlockIds || []).forEach(cid => {
+      const cb = S.blocks.find(x => x.id === cid);
+      if (cb) allNodeIdsOf(cb).forEach(id => ids.add(id));
+    });
+    return ids;
+  }
+
+  function allBlockIdsOf(b) {
+    const ids = new Set([b.id]);
+    (b.childBlockIds || []).forEach(cid => {
+      const cb = S.blocks.find(x => x.id === cid);
+      if (cb) allBlockIdsOf(cb).forEach(id => ids.add(id));
+    });
+    return ids;
+  }
+
+  function collidesWithWorld(rect, excludeNodeIds, excludeBlockIds, bound) {
+    if (bound) {
+      if (rect.x          < bound.left   - 0.5 ||
+          rect.y          < bound.top    - 0.5 ||
+          rect.x + rect.w > bound.right  + 0.5 ||
+          rect.y + rect.h > bound.bottom + 0.5) return true;
+    }
+    for (const n of S.nodes) {
+      if (excludeNodeIds.has(n.id)) continue;
+      const bb = getNodeAABB(n);
+      if (rectsOverlap(rect, { x: bb.x, y: bb.y, w: bb.r - bb.x, h: bb.b - bb.y })) return true;
+    }
+    for (const b of S.blocks) {
+      if (excludeBlockIds.has(b.id)) continue;
+      const fr = b.fixedRect;
+      if (fr && rectsOverlap(rect, fr)) return true;
+    }
+    return false;
+  }
+
+  function findFreePos(idealX, idealY, w, h, excludeNodeIds, excludeBlockIds, bound) {
+    const sx = Math.max(0, Math.round(idealX / GRID) * GRID);
+    const sy = Math.max(0, Math.round(idealY / GRID) * GRID);
+    if (!collidesWithWorld({ x: sx, y: sy, w, h }, excludeNodeIds, excludeBlockIds, bound))
+      return { x: sx, y: sy };
+    for (let ring = 1; ring <= 80; ring++) {
+      const cands = [];
+      for (let i = -ring; i <= ring; i++) {
+        cands.push([i * GRID, -ring * GRID]);
+        cands.push([i * GRID,  ring * GRID]);
+      }
+      for (let i = -ring + 1; i < ring; i++) {
+        cands.push([-ring * GRID, i * GRID]);
+        cands.push([ ring * GRID, i * GRID]);
+      }
+      cands.sort((a, b) => a[0]*a[0]+a[1]*a[1] - (b[0]*b[0]+b[1]*b[1]));
+      for (const [dx, dy] of cands) {
+        const tx = Math.max(0, sx + dx);
+        const ty = Math.max(0, sy + dy);
+        if (!collidesWithWorld({ x: tx, y: ty, w, h }, excludeNodeIds, excludeBlockIds, bound))
+          return { x: tx, y: ty };
+      }
+    }
+    return { x: sx, y: sy };
+  }
+
+  // ── IDs being freed ──
+  const freedNodeIds  = new Set(blk.nodeIds);
+  const freedBlockIds = new Set([blk.id]);
+  (blk.childBlockIds || []).forEach(cid => {
+    const cb = S.blocks.find(x => x.id === cid);
+    if (cb) allBlockIdsOf(cb).forEach(id => freedBlockIds.add(id));
+  });
+
+  // ── Parent inner boundary ──
+  let parentBound = null;
+  if (parent && parent.fixedRect) {
+    const pf = parent.fixedRect;
+    parentBound = {
+      left:   pf.x + PAD,
+      top:    pf.y + HDR_H + PAD,
+      right:  pf.x + pf.w - PAD,
+      bottom: pf.y + pf.h - PAD
+    };
+  }
+
+  // ── Wire up data model BEFORE collision resolution ──
   if (parent) {
-    // Re-assign child blocks of the removed block to the parent
+    // blk's direct cards join parent.nodeIds (they were only in blk.nodeIds before)
+    parent.nodeIds = [
+      ...parent.nodeIds.filter(id => !freedNodeIds.has(id)), // avoid duplicates
+      ...blk.nodeIds
+    ];
+    // blk's child-blocks become direct children of parent
     parent.childBlockIds = [
       ...(parent.childBlockIds || []).filter(id => id !== blk.id),
       ...(blk.childBlockIds || [])
     ];
-    // nodeIds of removed block are already a subset of parent's nodeIds — no change needed
   }
-  // If no parent, direct child blocks become top-level (no action needed)
-
-  // Remove the block
+  // Remove blk itself
   S.blocks = S.blocks.filter(b => b.id !== blk.id);
+
+  // ── Collision resolution — incremental: each placed item becomes an obstacle ──
+  const pendingNodeIds  = new Set(freedNodeIds);
+  const pendingBlockIds = new Set(freedBlockIds);
+
+  // 1. Place freed CARDS
+  [...freedNodeIds].forEach(nid => {
+    const n = S.nodes.find(x => x.id === nid);
+    if (!n) { pendingNodeIds.delete(nid); return; }
+
+    const exclN = new Set(pendingNodeIds);   // this node + remaining pending
+    const exclB = new Set(pendingBlockIds);
+
+    const el  = document.querySelector(`[data-id="${nid}"]`);
+    const uw  = n._uw || (el ? Math.ceil(el.offsetWidth  / GRID) * GRID : 224);
+    const uh  = n._uh || (el ? Math.ceil(el.offsetHeight / GRID) * GRID : 128);
+    const visW = n.rotation === 90 ? uh : uw;
+    const visH = n.rotation === 90 ? uw : uh;
+    const visX = n.rotation === 90 ? n.x + (uw - uh) / 2 : n.x;
+    const visY = n.rotation === 90 ? n.y + (uh - uw) / 2 : n.y;
+
+    const free = findFreePos(visX, visY, visW, visH, exclN, exclB, parentBound);
+    if (n.rotation === 90) {
+      n.x = Math.max(0, free.x - (uw - uh) / 2);
+      n.y = Math.max(0, free.y - (uh - uw) / 2);
+    } else {
+      n.x = Math.max(0, free.x);
+      n.y = Math.max(0, free.y);
+    }
+    pendingNodeIds.delete(nid);
+  });
+
+  // 2. Place freed CHILD BLOCKS (rigid translation of whole subtree)
+  (blk.childBlockIds || []).forEach(cid => {
+    const cb = S.blocks.find(b => b.id === cid);
+    if (!cb || !cb.fixedRect) { pendingBlockIds.delete(cid); return; }
+
+    const cbAllNodeIds  = allNodeIdsOf(cb);
+    const cbAllBlockIds = allBlockIdsOf(cb);
+
+    const exclN = new Set(pendingNodeIds);
+    const exclB = new Set(pendingBlockIds);
+
+    const fr   = cb.fixedRect;
+    const free = findFreePos(fr.x, fr.y, fr.w, fr.h, exclN, exclB, parentBound);
+    const dx   = free.x - fr.x;
+    const dy   = free.y - fr.y;
+
+    if (dx !== 0 || dy !== 0) {
+      cbAllNodeIds.forEach(nid => {
+        const n = S.nodes.find(x => x.id === nid);
+        if (n) { n.x = Math.max(0, n.x + dx); n.y = Math.max(0, n.y + dy); }
+      });
+      cbAllBlockIds.forEach(bid => {
+        const b = S.blocks.find(x => x.id === bid);
+        if (b && b.fixedRect) {
+          b.fixedRect = { x: b.fixedRect.x + dx, y: b.fixedRect.y + dy,
+                          w: b.fixedRect.w, h: b.fixedRect.h };
+        }
+      });
+    }
+    cbAllNodeIds.forEach(id  => pendingNodeIds.delete(id));
+    cbAllBlockIds.forEach(id => pendingBlockIds.delete(id));
+  });
+
   S.selectedBlock = parent ? parent.id : null;
   renderTree();
   renderCanvas();
+  renderProps();
   status(`Block "${blk.name}" ungrouped`);
 }
 
@@ -1530,48 +1722,178 @@ function confirmPutInBlock() {
   S.selected = null; S.selectedBlock = newBlk.id;
   closeModal('modal-put-block');
 
-  // ── After creating the block, push external cards that overlap its rect away ──
-  // Do this after a rAF so DOM dimensions are available
+  // ── After creating the block, evict external cards AND external blocks that
+  //    overlap the new group's rect. Uses a collision model that includes ALL
+  //    block fixedRects so evicted items never land inside another group. ──
   requestAnimationFrame(() => {
-    const HDR_H = 28;
-    const M = GRID;
-    // Compute block visual rect
-    const bnodes = newBlk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
-    if (bnodes.length) {
-      let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity;
-      bnodes.forEach(n => {
-        const bb = getCardAABB(n);
-        if (bb.x < bx1) bx1 = bb.x; if (bb.y < by1) by1 = bb.y;
-        if (bb.x + bb.w > bx2) bx2 = bb.x + bb.w; if (bb.y + bb.h > by2) by2 = bb.y + bb.h;
-      });
-      const blkRect = { x: bx1 - GRID, y: by1 - GRID - HDR_H,
-                        w: (bx2 - bx1) + GRID * 2, h: (by2 - by1) + GRID * 2 + HDR_H };
+    const newRect = newBlk.fixedRect;
+    if (!newRect) { renderTree(); renderCanvas(); return; }
 
-      // Find external nodes that overlap the block rect
-      const externalNodes = S.nodes.filter(n => !originalSelection.has(n.id));
-      externalNodes.forEach(n => {
-        const bb = getCardAABB(n);
-        const nr = { x: bb.x, y: bb.y, w: bb.w, h: bb.h };
-        if (!rectsOverlap(nr, blkRect)) return;
-        // Find free position for this node starting from its current position
-        const snappedW = Math.ceil(bb.w / GRID) * GRID;
-        const snappedH = Math.ceil(bb.h / GRID) * GRID;
-        const free = findNearestFreeGridPos(
-          Math.round(n.x / GRID) * GRID,
-          Math.round(n.y / GRID) * GRID,
-          snappedW, snappedH, [n.id]
-        );
-        // Back-calculate n.x/n.y from visual corner
-        if (n.rotation === 90) {
-          const uw = n._uw || snappedW, uh = n._uh || snappedH;
-          n.x = Math.max(0, free.x - (uw - uh) / 2);
-          n.y = Math.max(0, free.y - (uh - uw) / 2);
-        } else {
-          n.x = Math.max(0, free.x);
-          n.y = Math.max(0, free.y);
-        }
+    // All node IDs that belong to the new block (direct + via child blocks)
+    const groupNodeIds = (function collectAll(blk) {
+      const ids = new Set(blk.nodeIds);
+      (blk.childBlockIds || []).forEach(cid => {
+        const cb = S.blocks.find(b => b.id === cid);
+        if (cb) collectAll(cb).forEach(id => ids.add(id));
       });
+      return ids;
+    })(newBlk);
+
+    // All block IDs that belong to the new block (self + descendants)
+    const groupBlockIds = (function collectAllBlocks(blk) {
+      const ids = new Set([blk.id]);
+      (blk.childBlockIds || []).forEach(cid => {
+        const cb = S.blocks.find(b => b.id === cid);
+        if (cb) collectAllBlocks(cb).forEach(id => ids.add(id));
+      });
+      return ids;
+    })(newBlk);
+
+    // ── Collision helper: does a rect {x,y,w,h} collide with anything except
+    //    a given set of excluded node/block IDs? ──
+    function collidesWithWorld(rect, excludeNodeIds, excludeBlockIds) {
+      // vs card nodes
+      for (const n of S.nodes) {
+        if (excludeNodeIds.has(n.id)) continue;
+        const bb = getNodeAABB(n);
+        if (rectsOverlap(rect, { x: bb.x, y: bb.y, w: bb.r - bb.x, h: bb.b - bb.y })) return true;
+      }
+      // vs block fixedRects
+      for (const blk of S.blocks) {
+        if (excludeBlockIds.has(blk.id)) continue;
+        const fr = blk.fixedRect;
+        if (fr && rectsOverlap(rect, fr)) return true;
+      }
+      return false;
     }
+
+    // ── Find nearest free position on the grid for a rect of given size,
+    //    starting from (idealX, idealY), excluding certain ids. ──
+    function findFreePos(idealX, idealY, w, h, excludeNodeIds, excludeBlockIds) {
+      const sx = Math.max(0, Math.round(idealX / GRID) * GRID);
+      const sy = Math.max(0, Math.round(idealY / GRID) * GRID);
+      if (!collidesWithWorld({ x: sx, y: sy, w, h }, excludeNodeIds, excludeBlockIds))
+        return { x: sx, y: sy };
+      for (let ring = 1; ring <= 60; ring++) {
+        const cands = [];
+        for (let i = -ring; i <= ring; i++) {
+          cands.push([i * GRID, -ring * GRID]);
+          cands.push([i * GRID,  ring * GRID]);
+        }
+        for (let i = -ring + 1; i < ring; i++) {
+          cands.push([-ring * GRID, i * GRID]);
+          cands.push([ ring * GRID, i * GRID]);
+        }
+        cands.sort((a, b) => a[0]*a[0]+a[1]*a[1] - (b[0]*b[0]+b[1]*b[1]));
+        for (const [dx, dy] of cands) {
+          const tx = Math.max(0, sx + dx);
+          const ty = Math.max(0, sy + dy);
+          if (!collidesWithWorld({ x: tx, y: ty, w, h }, excludeNodeIds, excludeBlockIds))
+            return { x: tx, y: ty };
+        }
+      }
+      return { x: sx, y: sy }; // fallback
+    }
+
+    // ── 1. Evict external BLOCKS whose fixedRect overlaps the new group rect ──
+    //    Process outermost (top-level) external blocks first so their children
+    //    move with them and don't get double-evicted.
+    const externalBlocks = S.blocks.filter(blk => !groupBlockIds.has(blk.id) && blk.fixedRect);
+
+    // Identify which external blocks are top-level (not children of another external block)
+    const allExternalBlockIds = new Set(externalBlocks.map(b => b.id));
+    function isChildOfExternalBlock(blkId) {
+      return externalBlocks.some(eb => (eb.childBlockIds || []).includes(blkId));
+    }
+    const topLevelExternal = externalBlocks.filter(blk => !isChildOfExternalBlock(blk.id));
+
+    topLevelExternal.forEach(blk => {
+      const fr = blk.fixedRect;
+      if (!rectsOverlap(fr, newRect)) return; // not overlapping — leave it
+
+      // Collect all node IDs inside this external block to move them together
+      const blkNodeIds = (function collectAll(b) {
+        const ids = new Set(b.nodeIds);
+        (b.childBlockIds || []).forEach(cid => {
+          const cb = S.blocks.find(x => x.id === cid);
+          if (cb) collectAll(cb).forEach(id => ids.add(id));
+        });
+        return ids;
+      })(blk);
+
+      const excludeNodes = new Set([...groupNodeIds, ...blkNodeIds]);
+      const excludeBlocks = new Set([...groupBlockIds, blk.id,
+        ...(function collectAllBlocks(b) {
+          const ids = new Set([b.id]);
+          (b.childBlockIds || []).forEach(cid => {
+            const cb = S.blocks.find(x => x.id === cid);
+            if (cb) collectAllBlocks(cb).forEach(id => ids.add(id));
+          });
+          return ids;
+        })(blk)
+      ]);
+
+      const free = findFreePos(fr.x, fr.y, fr.w, fr.h, excludeNodes, excludeBlocks);
+      const dx = free.x - fr.x;
+      const dy = free.y - fr.y;
+      if (dx === 0 && dy === 0) return;
+
+      // Move all nodes in this block by (dx, dy)
+      blkNodeIds.forEach(nid => {
+        const node = S.nodes.find(x => x.id === nid);
+        if (node) { node.x = Math.max(0, node.x + dx); node.y = Math.max(0, node.y + dy); }
+      });
+
+      // Update fixedRect of the moved block and all its descendants
+      (function shiftRects(b) {
+        if (b.fixedRect) {
+          b.fixedRect = { ...b.fixedRect, x: b.fixedRect.x + dx, y: b.fixedRect.y + dy };
+        }
+        (b.childBlockIds || []).forEach(cid => {
+          const cb = S.blocks.find(x => x.id === cid);
+          if (cb) shiftRects(cb);
+        });
+      })(blk);
+    });
+
+    // ── 2. Evict external CARDS (free nodes not in any group) that overlap the new rect ──
+    const allGroupedNodeIds = new Set();
+    S.blocks.forEach(blk => {
+      (function collect(b) {
+        b.nodeIds.forEach(id => allGroupedNodeIds.add(id));
+        (b.childBlockIds || []).forEach(cid => {
+          const cb = S.blocks.find(x => x.id === cid);
+          if (cb) collect(cb);
+        });
+      })(blk);
+    });
+
+    const freeExternalNodes = S.nodes.filter(n => !allGroupedNodeIds.has(n.id));
+    freeExternalNodes.forEach(n => {
+      const bb = getNodeAABB(n);
+      const cardRect = { x: bb.x, y: bb.y, w: bb.r - bb.x, h: bb.b - bb.y };
+      if (!rectsOverlap(cardRect, newRect)) return;
+
+      const uw = n._uw || Math.ceil((bb.r - bb.x) / GRID) * GRID;
+      const uh = n._uh || Math.ceil((bb.b - bb.y) / GRID) * GRID;
+      const visW = n.rotation === 90 ? uh : uw;
+      const visH = n.rotation === 90 ? uw : uh;
+      const visX = n.rotation === 90 ? n.x + (uw - uh) / 2 : n.x;
+      const visY = n.rotation === 90 ? n.y + (uh - uw) / 2 : n.y;
+
+      const excludeN = new Set([...groupNodeIds, n.id]);
+      const excludeB = new Set([...groupBlockIds]);
+      const free = findFreePos(visX, visY, visW, visH, excludeN, excludeB);
+
+      if (n.rotation === 90) {
+        n.x = Math.max(0, free.x - (uw - uh) / 2);
+        n.y = Math.max(0, free.y - (uh - uw) / 2);
+      } else {
+        n.x = Math.max(0, free.x);
+        n.y = Math.max(0, free.y);
+      }
+    });
+
     renderTree(); renderCanvas();
   });
   const msg = directChildIds.length
@@ -1685,6 +2007,10 @@ function renderBlocks() {
       if (!fromDiv && !fromHeader) return;
       if (e._dragClick) return; // suppress click after drag
       e.stopPropagation();
+      // Select this block and clear card selection
+      if (!e.ctrlKey && !e.metaKey) {
+        S.selected = null; S.multiSel.clear();
+      }
       selectBlock(blk.id, e.ctrlKey || e.metaKey);
     });
 
@@ -1695,19 +2021,19 @@ function renderBlocks() {
       const fromHeader = e.target === hdr || hdr.contains(e.target);
       const fromDiv    = e.target === div;
       if (!fromDiv && !fromHeader) return; // let nested blocks or cards handle their own events
-      e.stopPropagation(); e.preventDefault();
-      // Ctrl/Cmd+click = toggle multiSelBlocks, no drag
+      // Ctrl/Cmd+click = toggle multiSelBlocks, no drag — don't start drag, don't stopPropagation
       if (e.ctrlKey || e.metaKey) {
+        e.stopPropagation();
         selectBlock(blk.id, true);
         return;
       }
-      // Plain click without drag: select block (handled by click event above)
+      // For plain clicks: stop propagation + prevent default only to initiate drag
+      e.stopPropagation(); e.preventDefault();
       // Ensure block is selected immediately on mousedown so drag starts from selected state
       if (!S.multiSelBlocks.has(blk.id) && S.selectedBlock !== blk.id) {
+        S.selected = null; S.multiSel.clear();
         selectBlock(blk.id);
-      }
-      // Also clear any card selection when clicking a block
-      if (!e.ctrlKey && !e.metaKey) {
+      } else if (!e.ctrlKey && !e.metaKey) {
         S.selected = null; S.multiSel.clear();
       }
       function collectIds(b) {
@@ -1739,6 +2065,7 @@ function renderBlocks() {
       S._dragBlockId = blk.id;
       S._dragMoved  = false;
       S._homeBlockBoundary = null; // block drag has no outer boundary constraint
+      S._blockDragTotalDx = 0; S._blockDragTotalDy = 0; // accumulated translation for ancestor update
       // Record all dragged node IDs (needed for _dragMoved tracking; membership NOT updated for block drag)
       S._draggedNodeIds = nodes.map(n => n.id);
       // Cache dims for ALL nodes before drag starts
@@ -1908,7 +2235,7 @@ function openCopyFrom(layer) {
     document.getElementById('mal-memtype').value = n.memType || 'RAM';
     document.getElementById('mal-addr').value = n.segAddr || '';
     document.getElementById('mal-size').value = n.segSize !== undefined && n.segSize !== '' ? toHex(Number(n.segSize)) : '';
-    document.getElementById('mal-default').value = n.fillByte || '0x00';
+    document.getElementById('mal-default').value = n.segDefault || '0x00';
     document.getElementById('mal-desc').value = n.desc || '';
     toggleFillField('mal-default-grp', 'mal-memtype');
 
@@ -2181,6 +2508,7 @@ function isIdDuplicate(name, excludeNodeId) {
  */
 function validateIdentifier(name, label) {
   if (!name) return `${label} is required`;
+  if (name.length > 16) return `${label} must be 16 characters or fewer`;
   if (!/^[A-Z][A-Z0-9_]*$/.test(name))
     return `${label} must start with a letter and contain only A–Z, 0–9, _`;
   return '';
@@ -2349,7 +2677,7 @@ function confirmEditMal() {
   }
   const editSizeRaw = document.getElementById('edit-mal-size').value.trim();
   if (editSizeRaw === '' || isNaN(size)) {
-    setFieldError('edit-mal-addr-err', 'Size is required (can be 0)');
+    setFieldError('edit-mal-size-err', 'Size is required (can be 0)');
     valid = false;
   }
   if (!isNaN(addr) && !isNaN(size) && editSizeRaw !== '' && size > 0) {
@@ -2630,9 +2958,10 @@ function bfEditorRenameLast(bfId, newName, inputEl) {
     inputEl.value = f.name;
     return;
   }
-  const regBaseName = (document.getElementById('ral-name') || {}).value || '';
+  const regBaseName = (document.getElementById('ral-name') || {}).value.trim() || '';
   const clash = _modalBitfields.some(x => x._id !== bfId && x.name === newName);
-  const clashBase = newName === regBaseName.trim() && _modalBitfields.some(x => x._id !== bfId && x.name === regBaseName.trim());
+  // Also forbid reusing the register's own base name (consistent with add-field validation)
+  const clashBase = newName === regBaseName;
   if (clash || clashBase) {
     inputEl.style.borderBottomColor = 'var(--red)';
     inputEl.title = `"${newName}" already exists`;
@@ -2658,7 +2987,7 @@ function bfEditorAddField() {
   if (nextStart >= regSize) return;
   const maxSize = regSize - nextStart;
 
-  _confirmCallback = () => {
+  _confirmCallback = function _bfAddFieldCallback() {
     const bfName   = document.getElementById('bf-name').value.trim();
     const bfSize   = parseInt(document.getElementById('bf-size').value);
     const bfAccess = document.getElementById('bf-access').value;
@@ -2675,14 +3004,14 @@ function bfEditorAddField() {
       if (nameErrEl) nameErrEl.textContent = 'Name is required';
       else if (errEl) errEl.textContent = 'Name is required';
       if (nameEl) { nameEl.style.borderColor = 'var(--red)'; nameEl.dataset.errVal = bfName; }
-      _confirmCallback = arguments.callee;
+      _confirmCallback = _bfAddFieldCallback;
       return false;
     }
     if (!/^[A-Z][A-Z0-9_]*$/.test(bfName)) {
       if (nameErrEl) nameErrEl.textContent = 'Must start with a letter, A–Z 0–9 _';
       else if (errEl) errEl.textContent = 'Must start with a letter, A–Z 0–9 _';
       if (nameEl) { nameEl.style.borderColor = 'var(--red)'; nameEl.dataset.errVal = bfName; }
-      _confirmCallback = arguments.callee;
+      _confirmCallback = _bfAddFieldCallback;
       return false;
     }
     const regBaseName = document.getElementById('ral-name').value.trim();
@@ -2692,12 +3021,12 @@ function bfEditorAddField() {
       if (nameErrEl) { nameErrEl.textContent = `"${bfName}" already exists in this register`; }
       else if (errEl) { errEl.textContent = `"${bfName}" already exists in this register`; }
       if (nameEl) { nameEl.style.borderColor = 'var(--red)'; nameEl.dataset.errVal = bfName; }
-      _confirmCallback = arguments.callee;
+      _confirmCallback = _bfAddFieldCallback;
       return false;
     }
     if (isNaN(bfSize) || bfSize < 1 || bfSize > maxSize) {
       if (errEl) errEl.textContent = `Size must be 1–${maxSize} bit(s)`;
-      _confirmCallback = arguments.callee;
+      _confirmCallback = _bfAddFieldCallback;
       return false;
     }
     _modalBitfields.push({ _id: _modalBitfields.length + 1, name: bfName, bitStart: nextStart, bitEnd: bfEnd, access: bfAccess });
@@ -3571,35 +3900,64 @@ function makeCard(n) {
       }
     });
 
-    // ── Freeze home-block boundary NOW (at drag-start) so it never changes during drag ──
+    // ── Freeze home-block context at drag-start ──
     {
-      const PAD_BD = 32; // same as GRID
-      let homeBlkNow = null;
-      S.blocks.forEach(blk => {
-        if (blk.nodeIds.includes(n.id)) {
-          if (!homeBlkNow) { homeBlkNow = blk; }
-          else {
-            const homeIsParent = (homeBlkNow.childBlockIds || []).includes(blk.id);
-            if (homeIsParent) homeBlkNow = blk;
-          }
-        }
+      const HDR_H_BD = 28;
+      const PAD_BD   = GRID;
+
+      // Build a lookup: blockId → parent blockId (null if top-level)
+      const parentOf = {};
+      S.blocks.forEach(b => {
+        (b.childBlockIds || []).forEach(cid => { parentOf[cid] = b.id; });
       });
-      if (homeBlkNow) {
-        const allM = homeBlkNow.nodeIds.map(id => S.nodes.find(x => x.id === id)).filter(Boolean);
-        let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity;
-        allM.forEach(m => {
-          const bb = getCardAABB(m);
-          if (bb.x < bx1) bx1 = bb.x; if (bb.y < by1) by1 = bb.y;
-          if (bb.x + bb.w > bx2) bx2 = bb.x + bb.w; if (bb.y + bb.h > by2) by2 = bb.y + bb.h;
-        });
-        if (isFinite(bx1)) {
-          S._homeBlockBoundary = {
-            left:   bx1 - PAD_BD,
-            top:    by1 - PAD_BD,
-            right:  bx2 + PAD_BD,
-            bottom: by2 + PAD_BD
-          };
+
+      // blockDepthOf: walk parentOf chain to compute nesting depth
+      function blockDepthOf(blkId) {
+        let d = 0, cur = blkId;
+        while (parentOf[cur] !== undefined) { d++; cur = parentOf[cur]; }
+        return d;
+      }
+
+      // Find ALL blocks whose nodeIds directly contains n.id; pick the deepest one
+      const directContainers = S.blocks.filter(b => b.nodeIds.includes(n.id));
+      let innerBlk = null;
+      let innerDepth = -1;
+      directContainers.forEach(b => {
+        const d = blockDepthOf(b.id);
+        if (d > innerDepth) { innerDepth = d; innerBlk = b; }
+      });
+
+      if (innerBlk && innerBlk.fixedRect) {
+        const fr = innerBlk.fixedRect;
+        S._homeBlockBoundary = {
+          left:   fr.x + PAD_BD,
+          top:    fr.y + HDR_H_BD + PAD_BD,
+          right:  fr.x + fr.w - PAD_BD,
+          bottom: fr.y + fr.h - PAD_BD
+        };
+        S._homeBlockId = innerBlk.id;
+
+        // Collect boundaries of ALL ancestors (walk parentOf chain from innerBlk up)
+        const ancestorBoundaries = [];
+        let curId = parentOf[innerBlk.id];
+        while (curId !== undefined) {
+          const anc = S.blocks.find(b => b.id === curId);
+          if (anc && anc.fixedRect) {
+            const af = anc.fixedRect;
+            ancestorBoundaries.push({
+              left:   af.x + PAD_BD,
+              top:    af.y + HDR_H_BD + PAD_BD,
+              right:  af.x + af.w - PAD_BD,
+              bottom: af.y + af.h - PAD_BD
+            });
+          }
+          curId = parentOf[curId];
         }
+        S._ancestorBoundaries = ancestorBoundaries;
+      } else {
+        S._homeBlockBoundary = null;
+        S._homeBlockId = null;
+        S._ancestorBoundaries = [];
       }
     }
 
@@ -3851,183 +4209,250 @@ document.addEventListener('mousemove', e => {
     let hasOverlap = false;
 
     if (isBlockDrag) {
-      // ── BLOCK DRAG: use the block's full visual rect as the collision unit ──
-      // Compute dragged block AABB at candidate positions (cards + PAD on all sides + header)
+      // ── BLOCK DRAG ──
       const HDR_H = 28;
-      let dbMinX = Infinity, dbMinY = Infinity, dbMaxX = -Infinity, dbMaxY = -Infinity;
-      candidates.forEach(({ node, cx, cy }) => {
-        const bb = getCardAABB(node, cx, cy);
-        if (bb.x < dbMinX) dbMinX = bb.x; if (bb.y < dbMinY) dbMinY = bb.y;
-        if (bb.x + bb.w > dbMaxX) dbMaxX = bb.x + bb.w;
-        if (bb.y + bb.h > dbMaxY) dbMaxY = bb.y + bb.h;
+      const dragBlockId = S._dragBlockId;
+      const dragBlk = S.blocks.find(b => b.id === dragBlockId);
+      if (!dragBlk || !dragBlk.fixedRect) { hasOverlap = false; }
+      else {
+
+      // Build parentOf map for all blocks
+      const _parentOf = {};
+      S.blocks.forEach(b => {
+        (b.childBlockIds || []).forEach(cid => { _parentOf[cid] = b.id; });
       });
 
-      if (isFinite(dbMinX)) {
-        // Full block rect including PAD and header
+      // Collect self + all descendants
+      function collectDescIds(blk, out) {
+        out.add(blk.id);
+        (blk.childBlockIds || []).forEach(cid => {
+          const cb = S.blocks.find(b => b.id === cid);
+          if (cb) collectDescIds(cb, out);
+        });
+      }
+      const dragFamilyIds = new Set();
+      collectDescIds(dragBlk, dragFamilyIds);
+
+      // All node IDs inside dragged family
+      const familyNodeIds = new Set(draggedIds);
+      S.blocks.forEach(b => {
+        if (dragFamilyIds.has(b.id)) b.nodeIds.forEach(id => familyNodeIds.add(id));
+      });
+
+      // Ancestor chain of dragged block (direct parent, grandparent, …)
+      const ancestorIds = [];
+      let _cur = _parentOf[dragBlockId];
+      while (_cur !== undefined) { ancestorIds.push(_cur); _cur = _parentOf[_cur]; }
+      const directParentId = ancestorIds.length > 0 ? ancestorIds[0] : null;
+      const directParent   = directParentId ? S.blocks.find(b => b.id === directParentId) : null;
+
+      // ── blockOk(testDx, testDy): check if dragged block translated by (testDx,testDy) is valid ──
+      function blockOk(testDx, testDy) {
+        // Translate the frozen fixedRect by the test delta
+        const fr = dragBlk.fixedRect;
         const dbRect = {
-          x: dbMinX - PAD,
-          y: dbMinY - PAD - HDR_H,
-          w: (dbMaxX - dbMinX) + PAD * 2,
-          h: (dbMaxY - dbMinY) + PAD * 2 + HDR_H
+          x: fr.x + testDx,
+          y: fr.y + testDy,
+          w: fr.w,
+          h: fr.h
         };
 
-        const dragBlockId = S._dragBlockId;
+        // 1. Must stay inside every ancestor (innermost first = direct parent)
+        for (const ancId of ancestorIds) {
+          const anc = S.blocks.find(b => b.id === ancId);
+          if (!anc || !anc.fixedRect) continue;
+          const af = anc.fixedRect;
+          const inner = {
+            left:   af.x + PAD,
+            top:    af.y + HDR_H + PAD,
+            right:  af.x + af.w - PAD,
+            bottom: af.y + af.h - PAD
+          };
+          if (dbRect.x            < inner.left   - 0.5 ||
+              dbRect.y            < inner.top    - 0.5 ||
+              dbRect.x + dbRect.w > inner.right  + 0.5 ||
+              dbRect.y + dbRect.h > inner.bottom + 0.5) return false;
+        }
 
-        // Related blocks (self + descendants + parent) — these may overlap freely
-        const relatedIds = new Set([dragBlockId]);
-        function addDesc(blk) {
-          (blk.childBlockIds || []).forEach(cid => {
-            relatedIds.add(cid);
+        // 2. Must not overlap sibling blocks (blocks sharing same direct parent)
+        for (const sib of S.blocks) {
+          if (dragFamilyIds.has(sib.id)) continue;          // skip self/descendants
+          if (!sib.fixedRect) continue;
+          const sibParentId = _parentOf[sib.id];
+          // Sibling = same parent level
+          if (sibParentId !== directParentId) continue;
+          if (rectsOverlap(dbRect, sib.fixedRect)) return false;
+        }
+
+        // 3. Must not overlap sibling free cards
+        //    (cards in nodeIds of direct parent that are NOT inside any child block)
+        if (directParent) {
+          const childBlockNodeIds = new Set();
+          (directParent.childBlockIds || []).forEach(cid => {
             const cb = S.blocks.find(b => b.id === cid);
-            if (cb) addDesc(cb);
+            if (cb) cb.nodeIds.forEach(id => childBlockNodeIds.add(id));
           });
-        }
-        const dragBlk = S.blocks.find(b => b.id === dragBlockId);
-        if (dragBlk) addDesc(dragBlk);
-        S.blocks.forEach(b => {
-          if ((b.childBlockIds || []).includes(dragBlockId)) relatedIds.add(b.id);
-        });
-
-        // Nodes that are inside RELATED blocks — not obstacles
-        const relatedNodeIds = new Set(draggedIds);
-        S.blocks.forEach(b => {
-          if (relatedIds.has(b.id)) b.nodeIds.forEach(id => relatedNodeIds.add(id));
-        });
-        const externalNodes = S.nodes.filter(n => !relatedNodeIds.has(n.id));
-
-        // Check dragged block rect vs every external card
-        for (const o of externalNodes) {
-          const or = getCardAABB(o);
-          if (rectsOverlap(dbRect, or)) { hasOverlap = true; break; }
-        }
-
-        // Check dragged block rect vs every sibling block rect.
-        // Use fixedRect directly (already includes PAD+HDR); fallback computes all nodes recursively.
-        if (!hasOverlap) {
-          function allNodesOfBlk(b) {
-            const ids = new Set(b.nodeIds);
-            (b.childBlockIds || []).forEach(cid => {
-              const cb = S.blocks.find(x => x.id === cid);
-              if (cb) allNodesOfBlk(cb).forEach(id => ids.add(id));
-            });
-            return ids;
-          }
-          for (const otherBlk of S.blocks) {
-            if (relatedIds.has(otherBlk.id)) continue;
-            let oRect = otherBlk.fixedRect;
-            if (!oRect) {
-              const allIds = allNodesOfBlk(otherBlk);
-              let ox1 = Infinity, oy1 = Infinity, ox2 = -Infinity, oy2 = -Infinity;
-              allIds.forEach(id => {
-                const n2 = S.nodes.find(x => x.id === id);
-                if (!n2) return;
-                const bb = getCardAABB(n2);
-                if (bb.x < ox1) ox1 = bb.x; if (bb.y < oy1) oy1 = bb.y;
-                if (bb.x + bb.w > ox2) ox2 = bb.x + bb.w; if (bb.y + bb.h > oy2) oy2 = bb.y + bb.h;
-              });
-              if (!isFinite(ox1)) continue;
-              oRect = { x: ox1 - PAD, y: oy1 - PAD - HDR_H,
-                        w: (ox2 - ox1) + PAD * 2, h: (oy2 - oy1) + PAD * 2 + HDR_H };
-            }
-            if (rectsOverlap(dbRect, oRect)) { hasOverlap = true; break; }
+          for (const nid of directParent.nodeIds) {
+            if (familyNodeIds.has(nid)) continue;
+            if (childBlockNodeIds.has(nid)) continue; // inside a child block — rect checked above
+            const o = S.nodes.find(x => x.id === nid);
+            if (!o) continue;
+            if (rectsOverlap(dbRect, getCardAABB(o))) return false;
           }
         }
+
+        // 4. If top-level (no parent): must not overlap other top-level blocks or free canvas cards
+        if (!directParent) {
+          for (const sib of S.blocks) {
+            if (dragFamilyIds.has(sib.id)) continue;
+            if (_parentOf[sib.id] !== undefined) continue; // not top-level
+            if (!sib.fixedRect) continue;
+            if (rectsOverlap(dbRect, sib.fixedRect)) return false;
+          }
+          // Free cards (not in any block)
+          const allBlockedIds = new Set();
+          S.blocks.forEach(b => b.nodeIds.forEach(id => allBlockedIds.add(id)));
+          for (const o of S.nodes) {
+            if (familyNodeIds.has(o.id) || allBlockedIds.has(o.id)) continue;
+            if (rectsOverlap(dbRect, getCardAABB(o))) return false;
+          }
+        }
+
+        return true;
       }
+
+      // ── Axis-sliding for block drag ──
+      const bPrevDx = 0; // relative to dragLastValidX which is already at current pos
+      const bPrevDy = 0;
+      // desired delta from last valid
+      const wantDx = nx - S.dragLastValidX;
+      const wantDy = ny - S.dragLastValidY;
+
+      if (blockOk(wantDx, wantDy)) {
+        hasOverlap = false;
+      } else if (blockOk(wantDx, bPrevDy)) {
+        ny = S.dragLastValidY;
+        hasOverlap = false;
+      } else if (blockOk(bPrevDx, wantDy)) {
+        nx = S.dragLastValidX;
+        hasOverlap = false;
+      } else {
+        nx = S.dragLastValidX;
+        ny = S.dragLastValidY;
+        hasOverlap = true;
+      }
+      } // end else dragBlk exists
 
     } else {
       // ── CARD DRAG ──
-      const HDR_H = 28;
+      // Check whether the dragged card(s) at a given (testNx, testNy) are valid.
+      // Returns true if the position is collision-free.
+      // ── Precompute collision context once (outside positionOk) for performance ──
+      const _boundary       = S._homeBlockBoundary;
+      const _homeBlockId    = S._homeBlockId || null;
+      const _ancestorBounds = S._ancestorBoundaries || [];
 
-      // Find home block (if any) — the innermost block the dragged card belongs to
-      // (the one whose border acts as the movement boundary)
-      let homeBlk = null;
-      S.blocks.forEach(blk => {
-        if (blk.nodeIds.includes(S.drag.id)) {
-          // Pick the innermost (deepest) block
-          if (!homeBlk) {
-            homeBlk = blk;
-          } else {
-            // prefer the one that is a child of the other
-            const homeIsParent = (homeBlk.childBlockIds || []).includes(blk.id);
-            if (homeIsParent) homeBlk = blk;
-          }
-        }
-      });
+      // Helper: content area check (touching allowed, ±0.5px tolerance)
+      function withinBound(dr, b) {
+        return dr.x        >= b.left   - 0.5 &&
+               dr.y        >= b.top    - 0.5 &&
+               dr.x + dr.w <= b.right  + 0.5 &&
+               dr.y + dr.h <= b.bottom + 0.5;
+      }
 
-      if (homeBlk) {
-        // ── Card is INSIDE a block ──
-        // Use the boundary frozen at drag-start (S._homeBlockBoundary) so it never expands.
-        const allMembers = homeBlk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(Boolean);
-        const coMembers  = allMembers.filter(n => !draggedIds.has(n.id));
+      // Obstacles inside the home block:
+      //   - co-member CARDS (nodeIds of home block, excluding dragged)
+      //   - fixedRects of CHILD BLOCKS of home block (excluding dragged block's block, n/a for card drag)
+      const _homeBlk = _homeBlockId ? S.blocks.find(b => b.id === _homeBlockId) : null;
+      const _coMemberCards = _homeBlk
+        ? _homeBlk.nodeIds.map(id => S.nodes.find(n => n.id === id)).filter(n => n && !draggedIds.has(n.id))
+        : [];
+      // Child blocks of the home block are solid obstacles (their fixedRect is a wall)
+      const _childBlockRects = _homeBlk
+        ? (_homeBlk.childBlockIds || [])
+            .map(cid => S.blocks.find(b => b.id === cid))
+            .filter(cb => cb && cb.fixedRect)
+            .map(cb => cb.fixedRect)
+        : [];
 
-        // Prefer the pre-frozen boundary; fall back to static-members only if unavailable.
-        let innerLeft, innerTop, innerRight, innerBottom;
-        if (S._homeBlockBoundary) {
-          innerLeft   = S._homeBlockBoundary.left;
-          innerTop    = S._homeBlockBoundary.top;
-          innerRight  = S._homeBlockBoundary.right;
-          innerBottom = S._homeBlockBoundary.bottom;
-        } else {
-          // Fallback: build from static co-members (at least this doesn't expand)
-          let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity;
-          coMembers.forEach(m => {
-            const bb = getCardAABB(m);
-            if (bb.x < bx1) bx1 = bb.x; if (bb.y < by1) by1 = bb.y;
-            if (bb.x + bb.w > bx2) bx2 = bb.x + bb.w; if (bb.y + bb.h > by2) by2 = bb.y + bb.h;
-          });
-          innerLeft   = bx1 - PAD; innerTop    = by1 - PAD;
-          innerRight  = bx2 + PAD; innerBottom = by2 + PAD;
-        }
+      function positionOk(testNx, testNy) {
+        const testCandidates = [
+          { node: S.drag, cx: testNx, cy: testNy },
+          ...S.dragOffsets.map(({ node, dx, dy }) => ({
+            node, cx: snapVal(Math.max(0, testNx + dx)), cy: snapVal(Math.max(0, testNy + dy))
+          }))
+        ];
 
-        outer: for (const { node, cx, cy } of candidates) {
-          const dr = getCardAABB(node, cx, cy);
-
-          // 1. Must not exit block border
-          if (dr.x < innerLeft || dr.y < innerTop ||
-              dr.x + dr.w > innerRight || dr.y + dr.h > innerBottom) {
-            hasOverlap = true; break outer;
-          }
-
-          // 2. Must not overlap co-members
-          for (const o of coMembers) {
-            const or = getCardAABB(o);
-            if (rectsOverlap(dr, or)) { hasOverlap = true; break outer; }
-          }
-        }
-
-      } else {
-        // ── Card is on the canvas (no home block) ──
-        // Obstacles: all other cards + all block rects
-        const obstacles = S.nodes.filter(n => !draggedIds.has(n.id));
-
-        // Card vs cards
-        outer: for (const { node, cx, cy } of candidates) {
-          const dr = getCardAABB(node, cx, cy);
-          for (const o of obstacles) {
-            const or = getCardAABB(o);
-            if (rectsOverlap(dr, or)) { hasOverlap = true; break outer; }
-          }
-        }
-
-        // Card vs block rects — use fixedRect (authoritative, includes PAD+HDR)
-        if (!hasOverlap) {
-          for (const { node, cx, cy } of candidates) {
+        if (_boundary) {
+          // ── Card is INSIDE a block ──
+          for (const { node, cx, cy } of testCandidates) {
             const dr = getCardAABB(node, cx, cy);
-            for (const blk of S.blocks) {
-              // Skip the block this card belongs to (it's already inside, inner boundary enforced above)
-              if (blk.nodeIds.includes(node.id)) continue;
-              let bRect = blk.fixedRect;
-              if (!bRect) continue; // no rect computed yet, skip
-              if (rectsOverlap(dr, bRect)) { hasOverlap = true; break; }
+
+            // 1. Must stay within innermost block boundary
+            if (!withinBound(dr, _boundary)) return false;
+
+            // 2. Must stay within ALL ancestor block boundaries
+            for (const ab of _ancestorBounds) {
+              if (!withinBound(dr, ab)) return false;
             }
-            if (hasOverlap) break;
+
+            // 3. Must not overlap co-member cards in the same block
+            for (const o of _coMemberCards) {
+              if (rectsOverlap(dr, getCardAABB(o))) return false;
+            }
+
+            // 4. Must not overlap child-block rects (sub-groups are solid obstacles)
+            for (const cr of _childBlockRects) {
+              if (rectsOverlap(dr, cr)) return false;
+            }
+          }
+
+        } else {
+          // ── Card is on the canvas (no home block) ──
+          const obstacles = S.nodes.filter(n => !draggedIds.has(n.id));
+          for (const { node, cx, cy } of testCandidates) {
+            const dr = getCardAABB(node, cx, cy);
+            // vs other free cards
+            for (const o of obstacles) {
+              if (rectsOverlap(dr, getCardAABB(o))) return false;
+            }
+            // vs all block fixedRects (skip blocks that contain this node)
+            for (const blk of S.blocks) {
+              if (blk.nodeIds.includes(node.id)) continue;
+              const bRect = blk.fixedRect;
+              if (bRect && rectsOverlap(dr, bRect)) return false;
+            }
           }
         }
+        return true;
+      }
+
+      // ── Axis-sliding: try full move, then X-only, then Y-only ──
+      // This eliminates "sticking" at walls and gives smooth sliding motion.
+      const prevNx = S.dragLastValidX;
+      const prevNy = S.dragLastValidY;
+
+      if (positionOk(nx, ny)) {
+        hasOverlap = false; // full move accepted — fall through to normal accept
+      } else if (positionOk(nx, prevNy)) {
+        // Slide along X axis only
+        ny = prevNy;
+        hasOverlap = false;
+      } else if (positionOk(prevNx, ny)) {
+        // Slide along Y axis only
+        nx = prevNx;
+        hasOverlap = false;
+      } else {
+        hasOverlap = true; // fully blocked
       }
     }
 
     if (!hasOverlap) {
       // ── Accept position ──
+      // Compute frame delta BEFORE updating dragLastValidX/Y
+      const frameDx = nx - S.dragLastValidX;
+      const frameDy = ny - S.dragLastValidY;
+
       S.drag.x = Math.max(0, nx);
       S.drag.y = Math.max(0, ny);
       S.dragOffsets.forEach(({ node, dx, dy }) => {
@@ -4038,45 +4463,27 @@ document.addEventListener('mousemove', e => {
       S.dragLastValidY = ny;
       S._dragMoved = true;
 
-      // ── Block drag: update fixedRect of ALL moved blocks so the visual follows the cards ──
-      if (isBlockDrag) {
-        const HDR_H = 28;
-        function refreshBlockRect(blk) {
-          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          blk.nodeIds.forEach(id => {
-            const n2 = S.nodes.find(x => x.id === id);
-            if (!n2) return;
-            const bb = getCardAABB(n2);
-            if (bb.x < minX) minX = bb.x; if (bb.y < minY) minY = bb.y;
-            if (bb.x + bb.w > maxX) maxX = bb.x + bb.w; if (bb.y + bb.h > maxY) maxY = bb.y + bb.h;
-          });
+      // ── Block drag: translate fixedRect of dragged block + all descendants by (frameDx, frameDy).
+      //    Rigid translation only — w and h never change. ──
+      if (isBlockDrag && (frameDx !== 0 || frameDy !== 0)) {
+        function translateRects(blk) {
+          if (blk.fixedRect) {
+            blk.fixedRect = {
+              x: blk.fixedRect.x + frameDx,
+              y: blk.fixedRect.y + frameDy,
+              w: blk.fixedRect.w,
+              h: blk.fixedRect.h
+            };
+          }
           (blk.childBlockIds || []).forEach(cid => {
             const cb = S.blocks.find(b => b.id === cid);
-            if (cb) refreshBlockRect(cb); // refresh children first
-            if (cb && cb.fixedRect) {
-              const cr = cb.fixedRect;
-              if (cr.x < minX) minX = cr.x; if (cr.y < minY) minY = cr.y;
-              if (cr.x + cr.w > maxX) maxX = cr.x + cr.w; if (cr.y + cr.h > maxY) maxY = cr.y + cr.h;
-            }
+            if (cb) translateRects(cb);
           });
-          if (!isFinite(minX)) return;
-          const rx  = Math.floor((minX - GRID) / GRID) * GRID;
-          const ry  = Math.floor((minY - GRID - HDR_H) / GRID) * GRID;
-          const rx2 = Math.ceil( (maxX + GRID) / GRID) * GRID;
-          const ry2 = Math.ceil( (maxY + GRID) / GRID) * GRID;
-          blk.fixedRect = { x: rx, y: ry, w: rx2 - rx, h: ry2 - ry };
-        }
-        // Refresh ONLY the dragged block and its descendants — never ancestors.
-        // Ancestor (parent) fixedRect must stay frozen during drag so the parent border never changes.
-        function refreshDescendantsAndSelf(blk) {
-          (blk.childBlockIds || []).forEach(cid => {
-            const cb = S.blocks.find(b => b.id === cid);
-            if (cb) refreshDescendantsAndSelf(cb);
-          });
-          refreshBlockRect(blk);
         }
         const draggedBlk = S.blocks.find(b => b.id === S._dragBlockId);
-        if (draggedBlk) refreshDescendantsAndSelf(draggedBlk);
+        if (draggedBlk) translateRects(draggedBlk);
+        S._blockDragTotalDx = (S._blockDragTotalDx || 0) + frameDx;
+        S._blockDragTotalDy = (S._blockDragTotalDy || 0) + frameDy;
       }
 
       // ── Live membership: only when card is on canvas (not inside a block) ──
@@ -4195,46 +4602,34 @@ document.addEventListener('mouseup', e => {
   const wasBlockDrag = S._dragSource === 'block';
   const wasBlockDragId = S._dragBlockId;
   const wasDragMoved = S._dragMoved;
-  S.drag = null; S.dragOffsets = []; S._dragSource = null; S._dragBlockId = null; S._homeBlockBoundary = null;
+  S.drag = null; S.dragOffsets = []; S._dragSource = null; S._dragBlockId = null; S._homeBlockBoundary = null; S._homeBlockId = null; S._ancestorBoundaries = []; S._blockDragTotalDx = 0; S._blockDragTotalDy = 0;
   sc.classList.remove('rubber-sel');
   expandCanvasIfNeeded();
 
-  // ── After block drag: rebuild fixedRect of all ancestor blocks (bottom-up) ──
-  if (wasBlockDrag && wasBlockDragId && S._dragMoved) {
-    const HDR_H = 28;
-    function rebuildFixedRect(blk) {
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      blk.nodeIds.forEach(id => {
-        const n2 = S.nodes.find(x => x.id === id);
-        if (!n2) return;
-        const bb = getNodeAABB(n2);
-        if (bb.x < minX) minX = bb.x; if (bb.y < minY) minY = bb.y;
-        if (bb.r > maxX) maxX = bb.r; if (bb.b > maxY) maxY = bb.b;
-      });
-      (blk.childBlockIds || []).forEach(cid => {
-        const cb = S.blocks.find(b => b.id === cid);
-        if (!cb || !cb.fixedRect) return;
-        const cr = cb.fixedRect;
-        if (cr.x < minX) minX = cr.x; if (cr.y < minY) minY = cr.y;
-        if (cr.x + cr.w > maxX) maxX = cr.x + cr.w; if (cr.y + cr.h > maxY) maxY = cr.y + cr.h;
-      });
-      if (!isFinite(minX)) return;
-      const rx  = Math.floor((minX - GRID) / GRID) * GRID;
-      const ry  = Math.floor((minY - GRID - HDR_H) / GRID) * GRID;
-      const rx2 = Math.ceil( (maxX + GRID) / GRID) * GRID;
-      const ry2 = Math.ceil( (maxY + GRID) / GRID) * GRID;
-      blk.fixedRect = { x: rx, y: ry, w: rx2 - rx, h: ry2 - ry };
+  // ── After block drag: translate ancestor blocks' fixedRect by the same total (dx, dy).
+  //    Rigid translation only — ancestors never resize, only reposition. ──
+  if (wasBlockDrag && wasBlockDragId && wasDragMoved) {
+    const totalDx = S._blockDragTotalDx || 0;
+    const totalDy = S._blockDragTotalDy || 0;
+    if (totalDx !== 0 || totalDy !== 0) {
+      function translateAncestors(blkId) {
+        S.blocks.forEach(b => {
+          if ((b.childBlockIds || []).includes(blkId)) {
+            if (b.fixedRect) {
+              b.fixedRect = {
+                x: b.fixedRect.x + totalDx,
+                y: b.fixedRect.y + totalDy,
+                w: b.fixedRect.w,
+                h: b.fixedRect.h
+              };
+            }
+            translateAncestors(b.id); // propagate further up
+          }
+        });
+      }
+      translateAncestors(wasBlockDragId);
     }
-    // Rebuild ancestors bottom-up: find parent chain of wasBlockDragId
-    function rebuildAncestors(blkId) {
-      S.blocks.forEach(b => {
-        if ((b.childBlockIds || []).includes(blkId)) {
-          rebuildAncestors(b.id); // recurse up first
-          rebuildFixedRect(b);    // then rebuild this ancestor
-        }
-      });
-    }
-    rebuildAncestors(wasBlockDragId);
+    S._blockDragTotalDx = 0; S._blockDragTotalDy = 0;
   }
 
   // ── After drag: update block membership only if cards actually moved (card drag only, not block drag) ──
@@ -4251,6 +4646,10 @@ document.addEventListener('mouseup', e => {
     if (S.multiSel.size === 1 && S.multiSelBlocks.size === 0) {
       S.selected = [...S.multiSel][0];
       S.multiSel.clear(); S.multiSelBlocks.clear();
+      S.selectedBlock = null;
+    } else if (S.multiSel.size === 0 && S.multiSelBlocks.size === 0) {
+      // rubber-band on empty area — clear any block selection
+      S.selectedBlock = null;
     }
     renderTree(); renderCanvas(); renderProps();
     return;
@@ -4269,9 +4668,23 @@ document.addEventListener('mouseup', e => {
         document.activeElement?.blur();
         renderTree(); renderCanvas(); renderProps();
       }
+    } else if (onCard && !onBlock) {
+      // Clicked on a free card outside any block — deselect any selected block
+      if (S.selectedBlock !== null || S.multiSelBlocks.size > 0) {
+        S.selectedBlock = null; S.multiSelBlocks.clear();
+        renderTree(); renderCanvas(); renderProps();
+      }
+    } else if (onCard && onBlock) {
+      // Clicked on a card that is inside a block.
+      // The card's own mousedown/select() sets S.selectedBlock = null — just ensure
+      // any multi-block selection is cleared.
+      if (S.multiSelBlocks.size > 0) {
+        S.multiSelBlocks.clear();
+        renderTree(); renderCanvas(); renderProps();
+      }
     } else if (!onCard && onBlock) {
-      // Clicked on a block's background area — the block's own click handler fires separately.
-      // We only need to clear card selection here (block selection handled by selectBlock).
+      // Clicked on a block's empty area — block click handler selects it.
+      // Only clear card selection here.
       if (S.selected !== null || S.multiSel.size > 0) {
         S.selected = null; S.multiSel.clear();
         renderTree(); renderCanvas(); renderProps();
@@ -4403,11 +4816,11 @@ function renderProps() {
     body.innerHTML = `
     <div class="prop-grp"><label class="prop-lbl">Segment ID <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-name" value="${n.name}" onblur="setProp('name',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');ppClearErr('pp-name-err')"/><span class="field-err" id="pp-name-err"></span></div>
     <div class="prop-grp"><label class="prop-lbl">Memory Type</label><select class="prop-sel" onchange="setProp('memType',this.value);renderProps()">${['RAM','ROM','FLASH','MMIO','RESERVED'].map(t=>`<option value="${t}"${t===n.memType?' selected':''}>${t==='MMIO'?'MMIO (Memory-Mapped IO)':t}</option>`).join('')}</select></div>
-    <div class="prop-grp"><label class="prop-lbl">Start Address (hex) <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-addr" value="${n.segAddr||''}" placeholder="0x40020000" onblur="setProp('segAddr',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-addr-err')"/><span class="field-err" id="pp-addr-err"></span></div>
+    <div class="prop-grp"><label class="prop-lbl">Start Address (hex) <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-addr" value="${n.segAddr||''}" placeholder="0x40020000" onblur="setProp('segAddr',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="onHexInput(this,'pp-addr-err');ppClearErr('pp-addr-err')"/><span class="field-err" id="pp-addr-err"></span></div>
     <div class="prop-grp"><label class="prop-lbl">End Address</label><input class="prop-in" id="pp-end" value="${segEndAddr(n)}" disabled style="opacity:0.6"/></div>
     <div class="prop-grp">
       <label class="prop-lbl">Size (hex) <span style="color:var(--red)">*</span></label>
-      <input class="prop-in" id="pp-size" value="${n.segSize!==undefined&&n.segSize!==''?toHex(Number(n.segSize)):''}" placeholder="0x100" onblur="setProp('segSize',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-size-err')"/>
+      <input class="prop-in" id="pp-size" value="${n.segSize!==undefined&&n.segSize!==''?toHex(Number(n.segSize)):''}" placeholder="0x100" onblur="setProp('segSize',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="onHexInput(this,'pp-size-err');ppClearErr('pp-size-err')"/>
       <input class="prop-in" value="${segSizeStr(n)}" disabled style="opacity:0.45;margin-top:3px;font-size:11px;padding:3px 8px;"/>
       <span class="field-err" id="pp-size-err"></span>
     </div>
@@ -4454,7 +4867,7 @@ function renderProps() {
     <div class="prop-grp"><label class="prop-lbl">Register Type</label><input class="prop-in" value="${regType}" disabled/></div>
     ${isInternal ? `<div class="prop-grp"><label class="prop-lbl">Core</label><input class="prop-in" id="pp-core" value="${n.coreVal ?? 0}" type="number" min="0" onblur="setPropCore(this.value)" onkeydown="if(event.key==='Enter')this.blur()"/></div>` : ''}
     <div class="prop-grp"><label class="prop-lbl">Size</label><input class="prop-in" value="${regSize} bit" disabled/></div>
-    ${!isInternal && n.regAddr !== undefined ? `<div class="prop-grp"><label class="prop-lbl">Address <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-regaddr" value="${n.regAddr||''}" onblur="setProp('regAddr',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="ppClearErr('pp-regaddr-err')" placeholder="0x40000000"/><span class="field-err" id="pp-regaddr-err"></span></div>` : ''}
+    ${!isInternal && n.regAddr !== undefined ? `<div class="prop-grp"><label class="prop-lbl">Address <span style="color:var(--red)">*</span></label><input class="prop-in" id="pp-regaddr" value="${n.regAddr||''}" onblur="setProp('regAddr',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="onHexInput(this,'pp-regaddr-err');ppClearErr('pp-regaddr-err')" placeholder="0x40000000"/><span class="field-err" id="pp-regaddr-err"></span></div>` : ''}
     ${!isInternal && n.accessWidths && n.accessWidths.length ? `<div class="prop-grp"><label class="prop-lbl">Access Widths</label><input class="prop-in" value="${n.accessWidths.map(w=>w+'b').join(', ')}" disabled/></div>` : ''}
     <div class="prop-grp"><label class="prop-lbl">Value After Reset (hex)</label><input class="prop-in" value="${n.resetVal||'0x00000000'}" onblur="setProp('resetVal',this.value)" onkeydown="if(event.key==='Enter')this.blur()" placeholder="0x00000000"/></div>
     <div class="prop-grp"><label class="prop-lbl">Description</label><input class="prop-in" value="${n.desc||''}" oninput="setProp('desc',this.value)" placeholder="Description..."/></div>
@@ -4518,7 +4931,7 @@ function openAddBitfield() {
       <span class="field-err" id="bf-err"></span>
     </div>`;
 
-  _confirmCallback = () => {
+  _confirmCallback = function _ppAddBfCallback() {
     const bfName   = document.getElementById('bf-name').value.trim();
     const bfSize   = parseInt(document.getElementById('bf-size').value);
     const bfAccess = document.getElementById('bf-access').value;
@@ -4536,14 +4949,14 @@ function openAddBitfield() {
       if (nameErrEl) nameErrEl.textContent = 'Name is required';
       else if (errEl) errEl.textContent = 'Name is required';
       if (nameEl) { nameEl.style.borderColor = 'var(--red)'; nameEl.dataset.errVal = bfName; }
-      _confirmCallback = arguments.callee;
+      _confirmCallback = _ppAddBfCallback;
       return false;
     }
     if (!/^[A-Z][A-Z0-9_]*$/.test(bfName)) {
       if (nameErrEl) nameErrEl.textContent = 'Name must start with a letter and contain only A–Z, 0–9, _';
       else if (errEl) errEl.textContent = 'Name must start with a letter and contain only A–Z, 0–9, _';
       if (nameEl) { nameEl.style.borderColor = 'var(--red)'; nameEl.dataset.errVal = bfName; }
-      _confirmCallback = arguments.callee;
+      _confirmCallback = _ppAddBfCallback;
       return false;
     }
     const nameExists = (n.bitfields||[]).some(f => !f.isDefault && f.name === bfName);
@@ -4553,12 +4966,12 @@ function openAddBitfield() {
       if (nameErrEl) { nameErrEl.textContent = `"${bfName}" already exists in this register`; }
       else if (errEl) { errEl.textContent = `"${bfName}" already exists in this register`; }
       if (nameEl) { nameEl.style.borderColor = 'var(--red)'; nameEl.dataset.errVal = bfName; }
-      _confirmCallback = arguments.callee;
+      _confirmCallback = _ppAddBfCallback;
       return false;
     }
     if (isNaN(bfSize) || bfSize < 1 || bfSize > maxSize) {
       if (errEl) errEl.textContent = `Size must be between 1 and ${maxSize} bit(s)`;
-      _confirmCallback = arguments.callee;
+      _confirmCallback = _ppAddBfCallback;
       return false;
     }
 
@@ -4893,12 +5306,22 @@ function setProp(k, v) {
   renderTree(); renderCanvas(); updateStats();
 }
 
-function deleteNode(id) { S.nodes=S.nodes.filter(n=>n.id!==id); if(S.selected===id)S.selected=null; renderTree(); renderCanvas(); renderProps(); updateStats(); status('Node deleted'); }
+function deleteNode(id) {
+  S.nodes = S.nodes.filter(n => n.id !== id);
+  if (S.selected === id) S.selected = null;
+  // Remove the deleted node's id from any block's nodeIds
+  S.blocks.forEach(blk => { blk.nodeIds = blk.nodeIds.filter(nid => nid !== id); });
+  // Prune blocks that have become empty (no nodes and no child blocks)
+  S.blocks = S.blocks.filter(blk => blk.nodeIds.length > 0 || (blk.childBlockIds && blk.childBlockIds.length > 0));
+  renderTree(); renderCanvas(); renderProps(); updateStats(); status('Node deleted');
+}
 
 function setView(btn) {
   document.querySelectorAll('.canvas-bar .vbtn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  S.view = btn.textContent.trim().toLowerCase();
+  const raw = btn.textContent.trim().toLowerCase();
+  // The "All" button should set view to 'design' (the renderCanvas default/all check)
+  S.view = raw === 'all' ? 'design' : raw;
   renderCanvas();
 }
 
@@ -4965,7 +5388,7 @@ function loadProject() {
       // Use filename (without extension) as project name if file has no embedded name
       const fileBase = filename ? filename.replace(/\.(ubp|json)$/i,'') : null;
       const projName = d.name || fileBase || 'untitled';
-      Object.assign(S,{nodes,blocks:d.blocks||[],project:projName,nextId:d.nextId||1,nextBlockId:d.nextBlockId||1,selected:null,selectedBlock:null});
+      Object.assign(S,{nodes,blocks:d.blocks||[],project:projName,nextId:d.nextId||1,nextBlockId:d.nextBlockId||1,selected:null,selectedBlock:null,multiSel:new Set(),multiSelBlocks:new Set()});
       renderTree(); renderCanvas(); renderProps(); updateStats();
       expandCanvasIfNeeded();
       status(`Project "${filename || projName}" loaded`);
@@ -5113,8 +5536,11 @@ function parseYAML(text) {
 
 function toggleFillField(grpId, selectId) {
   const grp = document.getElementById(grpId);
+  const sel = document.getElementById(selectId);
   if (!grp) return;
-  grp.style.display = 'none';
+  // Show the fill-byte field only for non-MMIO and non-RESERVED memory types
+  const mt = sel ? sel.value : '';
+  grp.style.display = (mt === 'MMIO' || mt === 'RESERVED') ? 'none' : '';
 }
 
 function generateCode(mode) {
@@ -5386,6 +5812,7 @@ mal_err_t mal_fill(uint32_t addr, uint32_t size, uint8_t fill)
 }
 
 /* ── Simulated read/write API ── */
+static uint8_t *_sim_ptr(uint32_t addr);  /* forward declaration */
 uint8_t  MAL_read8 (uint32_t addr)            { return *_sim_ptr(addr);    }
 void     MAL_write8(uint32_t addr, uint8_t v) { *_sim_ptr(addr) = v;       }
 uint32_t MAL_read32(uint32_t addr)            { return *(uint32_t *)_sim_ptr(addr); }
@@ -5582,7 +6009,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const x0 = (e.clientX - r.left + cscroll.scrollLeft) / S.zoom;
     const y0 = (e.clientY - r.top  + cscroll.scrollTop)  / S.zoom;
     S.rubber = { x0, y0 };
-    S.multiSel.clear(); S.selected = null;
+    S.multiSel.clear(); S.multiSelBlocks.clear(); S.selected = null; S.selectedBlock = null;
     e.preventDefault();
   });
 
@@ -5733,9 +6160,9 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="mbody">
       <div class="prop-grp">
         <label class="prop-lbl">Block Name <span style="color:var(--red)">*</span></label>
-        <input class="prop-in" id="block-name-input"
+        <input class="prop-in" id="block-name-input" maxlength="16"
           placeholder="e.g. PERIPHERAL_GROUP"
-          oninput="let v=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'');if(v.length>0&&/^[0-9]/.test(v))v=v.slice(1);this.value=v;document.getElementById('block-name-err').textContent=''"
+          oninput="let v=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'').slice(0,16);if(v.length>0&&/^[0-9]/.test(v))v=v.slice(1);this.value=v;document.getElementById('block-name-err').textContent=''"
           onkeydown="if(event.key==='Enter')confirmPutInBlock();if(event.key==='Escape')closeModal('modal-put-block')" />
         <span class="field-err" id="block-name-err"></span>
         <span style="font-size:10px;color:var(--text3);margin-top:4px;display:block">
