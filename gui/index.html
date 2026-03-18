@@ -373,7 +373,33 @@ body {
 .ub-card:hover { box-shadow: var(--shadow-lg); border-color: var(--border2); cursor: default; }
 .ub-card.overlap { border-color: var(--red) !important; box-shadow: 0 0 0 2px #ef535040, var(--shadow-lg) !important; }
 .vbtn.snap-on { background: var(--bg4); color: var(--green); }
-/* Memory type border colors */
+/* Group membership edit mode */
+.canvas-block.membership-edit {
+  border: 2px dashed var(--cyan) !important;
+  box-shadow: 0 0 0 4px #4fc3f720 !important;
+  cursor: cell !important;
+}
+.canvas-block.membership-edit * { cursor: cell !important; }
+.membership-add-badge, .membership-rem-badge {
+  position: absolute;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; line-height: 1;
+  cursor: pointer; z-index: 9000;
+  box-shadow: 0 2px 6px #00000080;
+  transition: transform 0.12s, box-shadow 0.12s;
+  user-select: none;
+}
+.membership-add-badge { background: var(--green); color: #fff; }
+.membership-rem-badge { background: var(--red);   color: #fff; }
+.membership-add-badge:hover, .membership-rem-badge:hover {
+  transform: scale(1.25);
+  box-shadow: 0 3px 10px #00000090;
+}
+.ub-card.membership-inside  { outline: 2px solid var(--green) !important; outline-offset: 2px; }
+.ub-card.membership-outside { outline: 2px dashed var(--cyan) !important; outline-offset: 2px; }
+
 .ub-card.mt-RAM      { border-color: #ffd600; }
 .ub-card.mt-ROM      { border-color: #ef5350; }
 .ub-card.mt-FLASH    { border-color: #ff40c0; }
@@ -1602,6 +1628,163 @@ function ungroupSelectedBlock() {
   status(`Block "${blk.name}" ungrouped`);
 }
 
+// ── Group Membership Edit Mode ──────────────────────────────────────────────
+// Attivato con doppio-click sull'header di un gruppo oppure dal pannello Properties.
+// Mostra badge +/- sulle card vicine per aggiungere/rimuovere membri al volo.
+
+S.membershipEditBlockId = null;
+
+function enterMembershipEditMode(blockId) {
+  if (S.membershipEditBlockId !== null) exitMembershipEditMode();
+  S.membershipEditBlockId = blockId;
+  S.selectedBlock = blockId;
+  renderCanvas();
+  status('Modalità modifica gruppo — clicca ＋ per aggiungere, − per rimuovere. Premi Esc o doppio-click per uscire.', '');
+}
+
+function exitMembershipEditMode() {
+  S.membershipEditBlockId = null;
+  renderCanvas();
+  status('Ready');
+}
+
+function membershipAddNode(blockId, nodeId) {
+  const blk = S.blocks.find(b => b.id === blockId);
+  const n   = S.nodes.find(x => x.id === nodeId);
+  if (!blk || !n) return;
+  if (n.regType === 'INTERNAL') {
+    status(`Impossibile aggiungere il registro INTERNAL "${n.name}" a un gruppo`, 'warn');
+    return;
+  }
+
+  // ── Controllo contiguità di memoria con il gruppo ──
+  function nodeAddr(nd) {
+    if (nd.layer === 'mal') return isNaN(parseHex(nd.segAddr)) ? null : parseHex(nd.segAddr);
+    if (nd.layer === 'ral' && nd.regAddr) return isNaN(parseHex(nd.regAddr)) ? null : parseHex(nd.regAddr);
+    return null;
+  }
+  function nodeSize(nd) {
+    if (nd.layer === 'mal') return Number(nd.segSize) || 0;
+    return (nd.regSize || 32) / 8;
+  }
+  const newAddr = nodeAddr(n);
+  const newSize = nodeSize(n);
+  if (newAddr === null || newSize === 0) {
+    status(`"${n.name}" non ha indirizzo o size validi — impossibile verificare la contiguità`, 'warn');
+    return;
+  }
+  // Controlla che almeno un membro del gruppo sia adiacente al nuovo nodo
+  const members = blk.nodeIds.map(id => S.nodes.find(x => x.id === id)).filter(Boolean);
+  const isContiguous = members.some(m => {
+    const mAddr = nodeAddr(m);
+    const mSize = nodeSize(m);
+    if (mAddr === null || mSize === 0) return false;
+    // adiacente se i range si toccano esattamente in un verso o nell'altro
+    return (mAddr + mSize === newAddr) || (newAddr + newSize === mAddr);
+  });
+  if (!isContiguous) {
+    const addrHex = '0x' + newAddr.toString(16).toUpperCase();
+    const endHex  = '0x' + (newAddr + newSize).toString(16).toUpperCase();
+    status(`"${n.name}" [${addrHex}–${endHex}] non è contiguo in memoria con nessun membro del gruppo`, 'warn');
+    return;
+  }
+  if (!blk.nodeIds.includes(nodeId)) {
+    blk.nodeIds = [...blk.nodeIds, nodeId];
+    // Espandi fixedRect per includere il nuovo nodo
+    const bb = getNodeAABB(n);
+    const PAD = GRID, HDR_H = 28;
+    if (blk.fixedRect) {
+      let fr = { ...blk.fixedRect };
+      if (bb.x < fr.x + PAD)         { const g = Math.ceil((fr.x + PAD - bb.x) / GRID) * GRID; fr.x -= g; fr.w += g; }
+      if (bb.r > fr.x + fr.w - PAD)  { fr.w += Math.ceil((bb.r - (fr.x + fr.w - PAD)) / GRID) * GRID; }
+      if (bb.y < fr.y + HDR_H + PAD) { const g = Math.ceil((fr.y + HDR_H + PAD - bb.y) / GRID) * GRID; fr.y -= g; fr.h += g; }
+      if (bb.b > fr.y + fr.h - PAD)  { fr.h += Math.ceil((bb.b - (fr.y + fr.h - PAD)) / GRID) * GRID; }
+      blk.fixedRect = fr;
+    }
+    status(`"${n.name}" aggiunto al gruppo "${blk.name}"`);
+    renderCanvas();
+  }
+}
+
+function membershipRemoveNode(blockId, nodeId) {
+  const blk = S.blocks.find(b => b.id === blockId);
+  const n   = S.nodes.find(x => x.id === nodeId);
+  if (!blk) return;
+  if (blk.nodeIds.includes(nodeId)) {
+    blk.nodeIds = blk.nodeIds.filter(id => id !== nodeId);
+    if (blk.nodeIds.length === 0 && !(blk.childBlockIds && blk.childBlockIds.length)) {
+      S.blocks = S.blocks.filter(b => b.id !== blockId);
+      exitMembershipEditMode();
+      status(`Gruppo "${blk.name}" rimosso (nessun membro rimasto)`);
+      renderTree(); renderCanvas(); renderProps();
+      return;
+    }
+    status(`"${n ? n.name : nodeId}" rimosso dal gruppo "${blk.name}"`);
+    renderCanvas();
+  }
+}
+
+// Chiamata da renderBlocks per dipingere i badge +/- sulle card
+function renderMembershipBadges(blk) {
+  const inner     = document.getElementById('cinner');
+  const PAD       = GRID;
+  const PROXIMITY = GRID * 6;
+  const fr        = blk.fixedRect;
+  const groupRect = fr ? { x: fr.x, y: fr.y, r: fr.x + fr.w, b: fr.y + fr.h } : null;
+
+  // Raccoglie tutti i nodeId dentro i child-block del gruppo (non direttamente editabili qui)
+  function childBlockNodeIds(b) {
+    const ids = new Set();
+    (b.childBlockIds || []).forEach(cid => {
+      const cb = S.blocks.find(x => x.id === cid);
+      if (!cb) return;
+      cb.nodeIds.forEach(id => ids.add(id));
+      childBlockNodeIds(cb).forEach(id => ids.add(id));
+    });
+    return ids;
+  }
+  const inChild = childBlockNodeIds(blk);
+
+  S.nodes.forEach(n => {
+    const card = inner.querySelector(`.ub-card[data-id="${n.id}"]`);
+    if (!card) return;
+    const isInside = blk.nodeIds.includes(n.id);
+    if (inChild.has(n.id) && !isInside) return; // dentro un child-block, salta
+
+    const bb = getNodeAABB(n);
+
+    if (isInside) {
+      card.classList.add('membership-inside');
+      const badge = document.createElement('div');
+      badge.className = 'membership-rem-badge';
+      badge.textContent = '−';
+      badge.title = `Rimuovi "${n.name}" dal gruppo`;
+      badge.style.cssText = 'position:absolute;top:4px;right:28px;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;cursor:pointer;z-index:9000;box-shadow:0 2px 6px #00000080;background:var(--red);color:#fff;transition:transform 0.12s;';
+      badge.addEventListener('mousedown', e => e.stopPropagation());
+      badge.addEventListener('click', e => { e.stopPropagation(); membershipRemoveNode(blk.id, n.id); });
+      badge.addEventListener('mouseenter', () => badge.style.transform = 'scale(1.25)');
+      badge.addEventListener('mouseleave', () => badge.style.transform = '');
+      card.appendChild(badge);
+    } else if (groupRect && n.regType !== 'INTERNAL') {
+      // Mostra + solo per card vicine al gruppo
+      const nearX = bb.r >= groupRect.x - PROXIMITY && bb.x <= groupRect.r + PROXIMITY;
+      const nearY = bb.b >= groupRect.y - PROXIMITY && bb.y <= groupRect.b + PROXIMITY;
+      if (!nearX || !nearY) return;
+      card.classList.add('membership-outside');
+      const badge = document.createElement('div');
+      badge.className = 'membership-add-badge';
+      badge.textContent = '＋';
+      badge.title = `Aggiungi "${n.name}" al gruppo`;
+      badge.style.cssText = 'position:absolute;top:4px;right:28px;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;cursor:pointer;z-index:9000;box-shadow:0 2px 6px #00000080;background:var(--green);color:#fff;transition:transform 0.12s;';
+      badge.addEventListener('mousedown', e => e.stopPropagation());
+      badge.addEventListener('click', e => { e.stopPropagation(); membershipAddNode(blk.id, n.id); });
+      badge.addEventListener('mouseenter', () => badge.style.transform = 'scale(1.25)');
+      badge.addEventListener('mouseleave', () => badge.style.transform = '');
+      card.appendChild(badge);
+    }
+  });
+}
+
 function openPutInBlock() {
   const totalSelected = S.multiSel.size + S.multiSelBlocks.size;
   if (totalSelected < 2) return;
@@ -1630,6 +1813,129 @@ function confirmPutInBlock() {
     document.getElementById('block-name-input').focus();
     return;
   }
+
+  // ── RULE 1: No INTERNAL registers in a group ──
+  const internalInSel = [...S.multiSel].map(id => S.nodes.find(n => n.id === id)).filter(n => n && n.regType === 'INTERNAL');
+  if (internalInSel.length > 0) {
+    const names = internalInSel.map(n => `"${n.name}"`).join(', ');
+    closeModal('modal-put-block');
+    document.getElementById('confirm-msg').innerHTML =
+      `<strong>Cannot create group.</strong><br><br>` +
+      `INTERNAL register${internalInSel.length > 1 ? 's' : ''} ${names} cannot be included in a group.<br><br>` +
+      `Remove them from the selection and try again.`;
+    const okBtn = document.getElementById('confirm-ok-btn');
+    okBtn.textContent = 'OK'; okBtn.style.background = 'var(--blue-soft)';
+    document.querySelector('#modal-confirm .mhdr span').textContent = '⚠ Invalid Selection';
+    document.querySelector('#modal-confirm .mhdr').style.color = 'var(--amber)';
+    _confirmCallback = () => {};
+    document.getElementById('modal-confirm').classList.add('open');
+    return;
+  }
+
+  // ── RULE 2: Solo oggetti con indirizzi di memoria contigui possono essere raggruppati ──
+  // Due nodi sono "adiacenti" se il range [addr, addr+size) dell'uno tocca esattamente
+  // il range dell'altro: end(A) === start(B) oppure end(B) === start(A).
+  // Tutti i nodi selezionati devono formare un unico blocco contiguo in memoria.
+  (function checkMemoryContiguity() {
+    // Helper per recuperare addr e size di un nodo (stessa logica di sortMal)
+    function nodeAddr(n) {
+      if (n.layer === 'mal') return isNaN(parseHex(n.segAddr)) ? null : parseHex(n.segAddr);
+      if (n.layer === 'ral' && n.regAddr) return isNaN(parseHex(n.regAddr)) ? null : parseHex(n.regAddr);
+      return null;
+    }
+    function nodeSize(n) {
+      if (n.layer === 'mal') return Number(n.segSize) || 0;
+      return (n.regSize || 32) / 8;
+    }
+
+    // Raccoglie tutti i nodeId del candidato (multiSel + nodi dentro i blocchi selezionati)
+    function allNodeIdsOfBlock(blk) {
+      const ids = new Set(blk.nodeIds);
+      (blk.childBlockIds || []).forEach(cid => {
+        const cb = S.blocks.find(b => b.id === cid);
+        if (cb) allNodeIdsOfBlock(cb).forEach(id => ids.add(id));
+      });
+      return ids;
+    }
+    const candidateIds = new Set(S.multiSel);
+    S.multiSelBlocks.forEach(bid => {
+      const blk = S.blocks.find(b => b.id === bid);
+      if (blk) allNodeIdsOfBlock(blk).forEach(id => candidateIds.add(id));
+    });
+
+    const candidateList = [...candidateIds]
+      .map(id => S.nodes.find(n => n.id === id))
+      .filter(Boolean);
+
+    // Nodi senza indirizzo o senza size non possono partecipare al controllo
+    const withAddr = candidateList.filter(n => nodeAddr(n) !== null && nodeSize(n) > 0);
+    const withoutAddr = candidateList.filter(n => nodeAddr(n) === null || nodeSize(n) === 0);
+
+    if (withoutAddr.length > 0) {
+      const names = withoutAddr.map(n => `"${n.name}"`).join(', ');
+      closeModal('modal-put-block');
+      document.getElementById('confirm-msg').innerHTML =
+        `<strong>Impossibile creare il gruppo.</strong><br><br>` +
+        `${withoutAddr.length > 1 ? 'Gli oggetti' : "L'oggetto"} ${names} ` +
+        `non ${withoutAddr.length > 1 ? 'hanno' : 'ha'} indirizzo o size definiti.<br><br>` +
+        `Solo oggetti con indirizzo e size validi possono essere raggruppati per contiguità di memoria.`;
+      const okBtn = document.getElementById('confirm-ok-btn');
+      okBtn.textContent = 'OK'; okBtn.style.background = 'var(--blue-soft)';
+      document.querySelector('#modal-confirm .mhdr span').textContent = '⚠ Indirizzo mancante';
+      document.querySelector('#modal-confirm .mhdr').style.color = 'var(--amber)';
+      _confirmCallback = () => {};
+      document.getElementById('modal-confirm').classList.add('open');
+      return;
+    }
+
+    if (withAddr.length < 2) return; // singolo nodo: sempre contiguo
+
+    // Ordina per indirizzo crescente
+    withAddr.sort((a, b) => nodeAddr(a) - nodeAddr(b));
+
+    // Verifica che ogni nodo sia esattamente adiacente al successivo:
+    // end(n[i]) deve essere === addr(n[i+1])
+    let firstGap = null;
+    for (let i = 0; i < withAddr.length - 1; i++) {
+      const a = withAddr[i];
+      const b = withAddr[i + 1];
+      const endA  = nodeAddr(a) + nodeSize(a);
+      const addrB = nodeAddr(b);
+      if (endA !== addrB) {
+        firstGap = { a, b, endA, addrB };
+        break;
+      }
+    }
+
+    if (firstGap) {
+      const { a, b, endA, addrB } = firstGap;
+      const gapBytes = addrB - endA;
+      const gapDesc  = gapBytes > 0
+        ? `Gap di ${gapBytes} byte tra 0x${endA.toString(16).toUpperCase()} e 0x${addrB.toString(16).toUpperCase()}`
+        : `Sovrapposizione di ${-gapBytes} byte tra 0x${addrB.toString(16).toUpperCase()} e 0x${endA.toString(16).toUpperCase()}`;
+      closeModal('modal-put-block');
+      document.getElementById('confirm-msg').innerHTML =
+        `<strong>Impossibile creare il gruppo.</strong><br><br>` +
+        `Gli oggetti selezionati non sono <em>contigui in memoria</em>.<br><br>` +
+        `<span style="font-family:var(--font-code);font-size:11px;color:var(--amber)">` +
+        `"${a.name}" termina a 0x${endA.toString(16).toUpperCase()}<br>` +
+        `"${b.name}" inizia a  0x${addrB.toString(16).toUpperCase()}<br>` +
+        `${gapDesc}` +
+        `</span><br><br>` +
+        `Solo oggetti i cui range di memoria si toccano esattamente (end = start del successivo) possono essere raggruppati.`;
+      const okBtn = document.getElementById('confirm-ok-btn');
+      okBtn.textContent = 'OK'; okBtn.style.background = 'var(--blue-soft)';
+      document.querySelector('#modal-confirm .mhdr span').textContent = '⚠ Memoria non contigua';
+      document.querySelector('#modal-confirm .mhdr').style.color = 'var(--amber)';
+      _confirmCallback = () => {};
+      document.getElementById('modal-confirm').classList.add('open');
+      return;
+    }
+  })();
+  // If the above check triggered a popup it closed the modal and returned from the IIFE,
+  // but we need to also bail out of confirmPutInBlock. We detect this by checking if the
+  // modal-confirm is now open.
+  if (document.getElementById('modal-confirm').classList.contains('open')) return;
 
   // Keep the original selection — do NOT expand it with child block nodes
   const originalSelection = new Set(S.multiSel);
@@ -1971,9 +2277,10 @@ function renderBlocks() {
     const zIdx = (maxDepth - depth) + 1;
     const isSingleSel = S.selectedBlock === blk.id;
     const isMultiSel  = S.multiSelBlocks.has(blk.id);
+    const isMembershipEdit = S.membershipEditBlockId === blk.id;
 
     const div = document.createElement('div');
-    div.className = 'canvas-block';
+    div.className = 'canvas-block' + (isMembershipEdit ? ' membership-edit' : '');
     div.dataset.blockId = blk.id;
     div.style.left        = rect.x + 'px';
     div.style.top         = rect.y + 'px';
@@ -1999,7 +2306,20 @@ function renderBlocks() {
     hdr.style.background = hdrColor;
     hdr.style.color = (isSingleSel || isMultiSel) ? '#ffffff' : txtColor;
     hdr.textContent = blk.name;
+    if (isMembershipEdit) {
+      const hint = document.createElement('span');
+      hint.style.cssText = 'font-size:9px;opacity:0.7;margin-left:6px;font-weight:400;letter-spacing:0;text-transform:none;';
+      hint.textContent = '✏ modifica membri';
+      hdr.appendChild(hint);
+    }
     div.appendChild(hdr);
+
+    // Double-click on header: enter/exit membership edit mode
+    hdr.addEventListener('dblclick', e => {
+      e.stopPropagation();
+      if (S.membershipEditBlockId === blk.id) exitMembershipEditMode();
+      else enterMembershipEditMode(blk.id);
+    });
 
     div.addEventListener('click', e => {
       const fromHeader = e.target === hdr || hdr.contains(e.target);
@@ -2081,6 +2401,12 @@ function renderBlocks() {
 
     inner.insertBefore(div, inner.firstChild);
   });
+
+  // If a block is in membership-edit mode, paint the +/- badges on nearby cards
+  if (S.membershipEditBlockId !== null) {
+    const editBlk = S.blocks.find(b => b.id === S.membershipEditBlockId);
+    if (editBlk) renderMembershipBadges(editBlk);
+  }
 }
 
 function sortMal(dir, btn) {
@@ -3841,6 +4167,56 @@ function makeCard(n) {
 
     renderCanvas();
     expandCanvasIfNeeded();
+
+    // ── RULE: if a rotated node is inside a group and its new AABB exceeds the
+    //    group's fixedRect, expand the fixedRect (never shrink) to fit. ──
+    (function expandGroupsIfNeeded() {
+      const PAD   = GRID;
+      const HDR_H = 28;
+      idsToRotate.forEach(rid => {
+        const rn = S.nodes.find(x => x.id === rid);
+        if (!rn) return;
+        const bb = getNodeAABB(rn); // AABB after rotation
+        // Walk every block that contains this node
+        S.blocks.forEach(blk => {
+          function containsNode(b, nodeId) {
+            if (b.nodeIds.includes(nodeId)) return true;
+            return (b.childBlockIds || []).some(cid => {
+              const cb = S.blocks.find(x => x.id === cid);
+              return cb && containsNode(cb, nodeId);
+            });
+          }
+          if (!containsNode(blk, rid)) return;
+          const fr = blk.fixedRect;
+          if (!fr) return;
+          // Content area (inside header and padding)
+          const cLeft   = fr.x + PAD;
+          const cTop    = fr.y + HDR_H + PAD;
+          const cRight  = fr.x + fr.w - PAD;
+          const cBottom = fr.y + fr.h - PAD;
+          let changed = false;
+          let newFr = { ...fr };
+          if (bb.x < cLeft) {
+            const grow = Math.ceil((cLeft - bb.x) / GRID) * GRID;
+            newFr.x -= grow; newFr.w += grow; changed = true;
+          }
+          if (bb.r > cRight) {
+            const grow = Math.ceil((bb.r - cRight) / GRID) * GRID;
+            newFr.w += grow; changed = true;
+          }
+          if (bb.y < cTop) {
+            const grow = Math.ceil((cTop - bb.y) / GRID) * GRID;
+            newFr.y -= grow; newFr.h += grow; changed = true;
+          }
+          if (bb.b > cBottom) {
+            const grow = Math.ceil((bb.b - cBottom) / GRID) * GRID;
+            newFr.h += grow; changed = true;
+          }
+          if (changed) { blk.fixedRect = newFr; }
+        });
+      });
+      renderCanvas(); // re-render to show updated group borders
+    })();
   });
 
   // Delete button — stop propagation so it doesn't trigger drag/select
@@ -4801,6 +5177,10 @@ function renderProps() {
           <input class="prop-in" value="Group" disabled />
         </div>
         <div style="margin-top:8px">
+          <button class="btn" onclick="enterMembershipEditMode(${blk.id})"
+            style="background:#0a4a5a;color:var(--cyan);border:1px solid var(--cyan-dim);padding:5px 14px;border-radius:var(--radius);cursor:pointer;font-size:12px;font-weight:600;width:100%;margin-bottom:6px">
+            ✏ Modifica Membri
+          </button>
           <button class="btn" onclick="ungroupSelectedBlock()"
             style="background:#7a3090;color:#fff;border:none;padding:5px 14px;border-radius:var(--radius);cursor:pointer;font-size:12px;font-weight:600;width:100%">
             ⬡ Ungroup
@@ -5956,6 +6336,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('keydown', e=>{
     if(e.key==='Escape') {
       document.activeElement?.blur();
+      if (S.membershipEditBlockId !== null) { exitMembershipEditMode(); return; }
       if (S.multiSel.size > 0 || S.selected !== null) { S.multiSel.clear(); S.selected=null; renderTree(); renderCanvas(); renderProps(); }
       else closeModal();
     }
